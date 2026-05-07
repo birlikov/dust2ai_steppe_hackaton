@@ -33,7 +33,7 @@ class RegisteredTool:
     input_schema: dict[str, Any]
 
 
-@dataclass(slots=True)
+@dataclass
 class McpRegistry:
     config: McpConfig
     _sessions: dict[str, ClientSession] = field(default_factory=dict)
