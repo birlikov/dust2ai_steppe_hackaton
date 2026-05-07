@@ -1,0 +1,54 @@
+"""Telegram bot app factory + polling entry point."""
+
+from __future__ import annotations
+
+import asyncio
+
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
+from src.bot.handlers import router
+from src.bot.middleware import AuditMiddleware
+from src.bot.storage import SqliteFsmStorage
+from src.core.config import get_settings
+from src.core.logging import get_logger
+from src.storage import db
+
+log = get_logger(__name__)
+
+
+def build_bot() -> Bot:
+    token = get_settings().telegram_bot_token
+    if not token:
+        raise RuntimeError(
+            "TELEGRAM_BOT_TOKEN is not set — copy config/.env.example to .env"
+        )
+    return Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+
+def build_dispatcher() -> Dispatcher:
+    dp = Dispatcher(storage=SqliteFsmStorage())
+    dp.message.middleware(AuditMiddleware())
+    dp.include_router(router)
+    return dp
+
+
+async def run_polling() -> None:
+    bot = build_bot()
+    dp = build_dispatcher()
+    log.info("telegram.start_polling")
+    try:
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        await bot.session.close()
+        await db.close()
+
+
+def main() -> None:
+    """Synchronous entry: `uv run python -m src.bot.app`."""
+    asyncio.run(run_polling())
+
+
+if __name__ == "__main__":
+    main()
