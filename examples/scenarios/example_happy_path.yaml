@@ -1,0 +1,12 @@
+id: example.happy
+workflow: 0
+description: |
+  Example scenario shape, useful for harness self-tests.
+  Replace with real workflow scenarios at H+0.
+turns:
+  - user: "hi there"
+    expect:
+      contains_any: ["hi", "hello", "stub"]
+  - user: "do you have anything available tuesday?"
+    expect:
+      contains_any: ["tuesday", "available", "stub"]
