@@ -1,0 +1,94 @@
+[project]
+name = "hackaton"
+version = "0.1.0"
+description = "Steppe Business Club Hackathon — agentic AI for real business"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.13",
+    "aiosqlite>=0.20",
+    "anthropic>=0.39",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "mcp>=1.1",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "structlog>=24.4",
+    "uvicorn[standard]>=0.32",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.7",
+    "types-pyyaml>=6.0",
+]
+
+[tool.uv]
+package = false
+
+# ----------------------------------------------------------------------------
+# Ruff — lint + format
+# ----------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # isort
+    "B",           # bugbear
+    "UP",          # pyupgrade
+    "ASYNC",       # async-correctness
+    "S",           # bandit (security)
+    "RUF",         # ruff-specific
+    "SIM",         # simplify
+    "PL",          # pylint subset
+    "TID",         # tidy imports
+]
+ignore = [
+    "S101",        # asserts allowed in tests
+    "PLR0913",     # too-many-args is fine for tool defs
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "PLR2004"]
+"scripts/**" = ["S"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ----------------------------------------------------------------------------
+# Mypy — types
+# ----------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+disallow_any_generics = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["aiogram.*", "mcp.*"]
+ignore_missing_imports = true
+
+# ----------------------------------------------------------------------------
+# Pytest
+# ----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "integration: hits real services (MCP, Anthropic)",
+    "scenario: end-to-end scenario tests",
+]

@@ -1,0 +1,4 @@
+{
+  "_comment": "MCP server registry. Populated by the mcp-recon subagent at H+0 to H+1 of the event from organizer-provided URLs/configs. Loaded by src/mcp/loader.py at runtime.",
+  "servers": {}
+}
