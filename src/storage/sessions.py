@@ -26,6 +26,14 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+async def get_by_id(session_id: str) -> Session | None:
+    """Look up a session by primary key."""
+    conn = await get_connection()
+    cur = await conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
+    row = await cur.fetchone()
+    return _row_to_session(row) if row is not None else None
+
+
 async def get_or_create(channel: str, external_id: str) -> Session:
     """Find an existing session for (channel, external_id) or create a new one."""
     conn = await get_connection()
