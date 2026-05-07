@@ -7,6 +7,7 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand, BotCommandScopeDefault
 
 from src.bot.handlers import router
 from src.bot.middleware import AuditMiddleware
@@ -16,6 +17,19 @@ from src.core.logging import get_logger
 from src.storage import db
 
 log = get_logger(__name__)
+
+BOT_COMMANDS: list[BotCommand] = [
+    BotCommand(command="start", description="Begin a session"),
+    BotCommand(command="help", description="Show available commands"),
+    BotCommand(command="cancel", description="Cancel the current operation"),
+    BotCommand(command="restart", description="Wipe state and start over"),
+]
+
+
+async def sync_commands(bot: Bot) -> None:
+    """Push the canonical command list to Telegram so the Menu button shows it."""
+    await bot.set_my_commands(BOT_COMMANDS, scope=BotCommandScopeDefault())
+    log.info("telegram.commands_synced", count=len(BOT_COMMANDS))
 
 
 def build_bot() -> Bot:
@@ -37,6 +51,7 @@ def build_dispatcher() -> Dispatcher:
 async def run_polling() -> None:
     bot = build_bot()
     dp = build_dispatcher()
+    await sync_commands(bot)
     log.info("telegram.start_polling")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
