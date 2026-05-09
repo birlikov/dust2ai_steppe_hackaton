@@ -34,3 +34,6 @@ scorecard.json
 
 # Claude Code user-local settings (agent files in .claude/agents/ are committed)
 .claude/settings.local.json
+
+# Saved hackathon launch-kit pages and any internal scratch
+_workfiles/
