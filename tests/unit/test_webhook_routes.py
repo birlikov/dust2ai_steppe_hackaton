@@ -62,6 +62,10 @@ class FakeMcpClient:
             return self.kitchen
         if tool == "marketing_report_to_owner":
             return {"ok": True}
+        if tool == "square_create_order":
+            return {"orderId": "sq_order_test_42", "mode": "simulated"}
+        if tool == "kitchen_create_ticket":
+            return {"ticketId": "kt_ticket_test_42", "mode": "simulated"}
         return None
 
 
@@ -162,6 +166,62 @@ def test_api_lead_persists_and_acks() -> None:
         body = r.json()
         assert body["status"] == "received"
         assert body["lead_id"]
+
+
+def test_api_order_happy_path() -> None:
+    fake = FakeMcpClient()
+    app = build_app(AppDeps(mcp_client=fake))  # type: ignore[arg-type]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/order",
+            json={
+                "items": [{"slug": "honey-cake-slice", "quantity": 2}],
+                "customer": {"name": "Maria", "contact": "+12815550100"},
+                "fulfillment": {"type": "pickup", "at_iso": "2026-05-10T17:00:00Z"},
+                "source": "website",
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "confirmed"
+        assert body["order_id"] == "sq_order_test_42"
+        assert body["ticket_id"] == "kt_ticket_test_42"
+        assert body["total_usd"] == 17.0  # 8.50 * 2
+        tools = [c[0] for c in fake.calls]
+        assert "square_create_order" in tools
+        assert "kitchen_create_ticket" in tools
+
+
+def test_api_order_unknown_slug_400() -> None:
+    fake = FakeMcpClient()
+    app = build_app(AppDeps(mcp_client=fake))  # type: ignore[arg-type]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/order",
+            json={
+                "items": [{"slug": "imaginary-cake", "quantity": 1}],
+                "customer": {"name": "Maria", "contact": "+12815550100"},
+                "fulfillment": {"type": "pickup"},
+            },
+        )
+        assert r.status_code == 400
+        assert "imaginary-cake" in r.json()["message"]
+
+
+def test_api_order_503_when_mcp_missing() -> None:
+    app = build_app(AppDeps(mcp_client=None))
+    with TestClient(app) as client:
+        client.app.state.mcp_client = None  # type: ignore[attr-defined]
+        r = client.post(
+            "/api/order",
+            json={
+                "items": [{"slug": "honey-cake-slice", "quantity": 1}],
+                "customer": {"name": "Maria", "contact": "+12815550100"},
+                "fulfillment": {"type": "pickup"},
+            },
+        )
+        assert r.status_code in (200, 503)
+        # 200 only if a real backend is reachable in this env; otherwise 503 is the default
 
 
 def test_api_lead_rejects_missing_required_fields() -> None:

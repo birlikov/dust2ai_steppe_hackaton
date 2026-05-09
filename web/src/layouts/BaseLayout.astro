@@ -68,12 +68,30 @@ const fullTitle = title === "HappyCake" ? title : `${title} — HappyCake`;
             HappyCake
           </span>
         </a>
-        <nav aria-label="Main navigation">
-          <ul class="flex gap-6 list-none m-0 p-0 text-sm font-body font-medium">
-            <li><a href="/order" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">Order</a></li>
+        <nav aria-label="Main navigation" class="flex items-center gap-6">
+          <ul class="flex gap-5 list-none m-0 p-0 text-sm font-body font-medium">
+            <li><a href="/" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">Cashier</a></li>
+            <li><a href="/menu" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">Menu</a></li>
+            <li><a href="/agent" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">For agents</a></li>
             <li><a href="/policies" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">Policies</a></li>
-            <li><a href="/about" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">About</a></li>
           </ul>
+          <a
+            href="/checkout"
+            id="cart-icon"
+            class="relative inline-flex items-center justify-center w-9 h-9 text-cream-50 hover:bg-happy-blue-700 transition-colors no-underline"
+            aria-label="Cart"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="21" r="1"></circle>
+              <circle cx="20" cy="21" r="1"></circle>
+              <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"></path>
+            </svg>
+            <span
+              id="cart-count"
+              data-count="0"
+              class="absolute -top-1 -right-1 min-w-4 h-4 px-1 text-[0.65rem] font-semibold rounded-full bg-accent-coral text-cream-50 flex items-center justify-center hidden"
+            >0</span>
+          </a>
         </nav>
       </div>
     </header>
@@ -140,6 +158,27 @@ const fullTitle = title === "HappyCake" ? title : `${title} — HappyCake`;
         </div>
       </div>
     </footer>
+
+    <!-- Cart count syncs from localStorage on every page -->
+    <script is:inline>
+      (function() {
+        function refreshCart() {
+          try {
+            var raw = localStorage.getItem('hc_cart');
+            var cart = raw ? JSON.parse(raw) : [];
+            var count = cart.reduce(function(sum, line) { return sum + (line.quantity || 0); }, 0);
+            var badge = document.getElementById('cart-count');
+            if (!badge) return;
+            badge.textContent = String(count);
+            if (count > 0) badge.classList.remove('hidden');
+            else badge.classList.add('hidden');
+          } catch (err) { /* ignore */ }
+        }
+        document.addEventListener('DOMContentLoaded', refreshCart);
+        window.addEventListener('storage', refreshCart);
+        window.addEventListener('hc-cart-changed', refreshCart);
+      })();
+    </script>
 
     {!hideFloatingChat && (
       <>

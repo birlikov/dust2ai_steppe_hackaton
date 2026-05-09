@@ -31,6 +31,40 @@
       what's fresh today, what fits ten guests, custom for Saturday.
     </p>
 
+    <!-- Cashier illustration. data-state swaps colour + caption. -->
+    <div class="cashier-figure" id="cashier-figure" data-state="idle" aria-hidden="true">
+      <svg viewBox="0 0 120 120" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
+        <!-- counter -->
+        <rect x="10" y="92" width="100" height="20" fill="#1B4868" />
+        <rect x="10" y="88" width="100" height="6" fill="#0E2A3C" />
+        <!-- cashier body -->
+        <ellipse cx="60" cy="92" rx="22" ry="6" fill="#3B7BA8" opacity="0.4" />
+        <circle cx="60" cy="55" r="18" fill="#FBF6E8" stroke="#0E2A3C" stroke-width="1.5" />
+        <!-- apron -->
+        <path d="M40 92 Q40 70 60 70 Q80 70 80 92 Z" fill="#BFD8E8" stroke="#0E2A3C" stroke-width="1.5" />
+        <!-- cap -->
+        <path d="M44 42 Q60 28 76 42 L76 50 L44 50 Z" fill="#FBF6E8" stroke="#0E2A3C" stroke-width="1.5" />
+        <!-- eyes (state-specific via CSS) -->
+        <circle class="cashier-eye" cx="55" cy="55" r="1.5" fill="#0E2A3C" />
+        <circle class="cashier-eye" cx="65" cy="55" r="1.5" fill="#0E2A3C" />
+        <!-- mouth (state-specific via CSS) -->
+        <path class="cashier-mouth" d="M55 62 Q60 65 65 62" stroke="#0E2A3C" stroke-width="1.5" fill="none" stroke-linecap="round" />
+        <!-- thinking dots (only rendered in thinking state) -->
+        <g class="cashier-think">
+          <circle cx="86" cy="38" r="1.6" fill="#0E2A3C">
+            <animate attributeName="opacity" values="0.2;1;0.2" dur="1s" begin="0s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="92" cy="34" r="1.6" fill="#0E2A3C">
+            <animate attributeName="opacity" values="0.2;1;0.2" dur="1s" begin="0.2s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="98" cy="30" r="1.6" fill="#0E2A3C">
+            <animate attributeName="opacity" values="0.2;1;0.2" dur="1s" begin="0.4s" repeatCount="indefinite" />
+          </circle>
+        </g>
+      </svg>
+      <span class="cashier-caption" id="cashier-caption">listening</span>
+    </div>
+
     <div class="cashier-card" id="cashier-card" role="region" aria-label="Talk to the HappyCake cashier">
       <div class="cashier-card__transcript" id="cashier-transcript" aria-live="polite" aria-atomic="false"></div>
 
@@ -113,7 +147,45 @@
     line-height: 1.55;
     color: #BFD8E8;
     max-width: 540px;
-    margin: 0 auto 2rem;
+    margin: 0 auto 1.5rem;
+  }
+
+  .cashier-figure {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0 auto 1.25rem;
+    transition: transform 200ms ease;
+  }
+  .cashier-figure svg {
+    background: rgba(251, 246, 232, 0.85);
+    border-radius: 50%;
+    padding: 6px;
+  }
+  .cashier-figure .cashier-think { display: none; }
+  .cashier-figure[data-state="thinking"] .cashier-think { display: block; }
+  .cashier-figure[data-state="thinking"] svg {
+    background: #BFD8E8;
+  }
+  .cashier-figure[data-state="serving"] svg {
+    background: #6E9D74;
+  }
+  .cashier-figure[data-state="serving"] .cashier-mouth {
+    d: path("M53 60 Q60 68 67 60");
+  }
+  .cashier-figure[data-state="apologizing"] svg {
+    background: #E08066;
+  }
+  .cashier-figure[data-state="apologizing"] .cashier-mouth {
+    d: path("M55 64 Q60 60 65 64");
+  }
+  .cashier-caption {
+    font-family: "Inter", sans-serif;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: #BFD8E8;
   }
 
   .cashier-card {
@@ -138,18 +210,28 @@
     padding: 0.5rem 0.25rem;
   }
   .cashier-card__transcript .cashier-msg {
-    margin: 0 0 0.6rem;
-    padding: 0.55rem 0.75rem;
-    max-width: 92%;
+    margin: 0 0 0.55rem;
+    padding: 0.55rem 0.85rem;
+    max-width: 86%;
+    border-radius: 0;
+    line-height: 1.45;
+    animation: cashier-fade 180ms ease both;
+  }
+  @keyframes cashier-fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   .cashier-card__transcript .cashier-msg--user {
-    background: #F4ECD3;
+    background: #1B4868;
+    color: #FBF6E8;
     margin-left: auto;
     text-align: right;
   }
   .cashier-card__transcript .cashier-msg--assistant {
-    background: #BFD8E8;
+    background: #F4ECD3;
+    color: #1A1816;
     margin-right: auto;
+    border-left: 2px solid #1B4868;
   }
   .cashier-card__transcript .cashier-msg--error {
     background: #E08066;
@@ -157,7 +239,21 @@
   }
   .cashier-card__transcript .cashier-msg--typing {
     font-style: italic;
-    opacity: 0.65;
+    opacity: 0.7;
+    background: transparent;
+    border-left: none;
+  }
+  .cashier-card__transcript .cashier-msg--typing::after {
+    content: "…";
+    display: inline-block;
+    margin-left: 0.2rem;
+    animation: cashier-dots 1s steps(4, end) infinite;
+  }
+  @keyframes cashier-dots {
+    0% { content: ""; }
+    25% { content: "."; }
+    50% { content: ".."; }
+    75%, 100% { content: "..."; }
   }
 
   .cashier-card__chips {
@@ -255,8 +351,29 @@
     const input = document.getElementById("cashier-input");
     const send = document.getElementById("cashier-send");
     const chips = document.getElementById("cashier-chips");
+    const figure = document.getElementById("cashier-figure");
+    const caption = document.getElementById("cashier-caption");
 
     if (!transcript || !form || !input || !send || !chips) return;
+
+    const CAPTIONS = {
+      idle: "listening",
+      thinking: "checking the counter",
+      serving: "ringing it up",
+      apologizing: "let me check",
+    };
+
+    function setState(state) {
+      if (figure) figure.dataset.state = state;
+      if (caption) caption.textContent = CAPTIONS[state] || "listening";
+    }
+
+    function pickState(reply) {
+      var lower = (reply || "").toLowerCase();
+      if (/sorry|apolog|can'?t|couldn'?t|let me check/.test(lower)) return "apologizing";
+      if (/yes|ready|on the counter|we have|today|order|confirm/.test(lower)) return "serving";
+      return "idle";
+    }
 
     function appendMessage(text, role) {
       const div = document.createElement("div");
@@ -273,9 +390,10 @@
       pending = true;
       send.disabled = true;
       input.value = "";
+      setState("thinking");
 
       appendMessage(message, "user");
-      const typing = appendMessage("Asking the cashier…", "typing");
+      const typing = appendMessage("checking the counter", "typing");
 
       try {
         const res = await fetch(apiBase + "/api/chat", {
@@ -286,6 +404,7 @@
         typing.remove();
 
         if (!res.ok) {
+          setState("apologizing");
           appendMessage(
             "I couldn't reach the team's assistant just now — please try again in a moment.",
             "error"
@@ -298,9 +417,12 @@
           sessionId = data.session_id;
           localStorage.setItem(STORAGE_KEY, sessionId);
         }
-        appendMessage(data.reply || "(no response)", "assistant");
+        const reply = data.reply || "(no response)";
+        setState(pickState(reply));
+        appendMessage(reply, "assistant");
       } catch (err) {
         typing.remove();
+        setState("apologizing");
         appendMessage(
           "Couldn't reach the cashier — please try again.",
           "error"
@@ -309,6 +431,13 @@
         pending = false;
         send.disabled = false;
         input.focus();
+        // Settle back to idle a few seconds after a successful turn so the
+        // next visitor doesn't see a stale serving/apologizing state.
+        setTimeout(function () {
+          if (!pending && figure && figure.dataset.state !== "idle") {
+            setState("idle");
+          }
+        }, 6000);
       }
     }
 

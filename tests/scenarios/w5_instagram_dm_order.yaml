@@ -1,0 +1,25 @@
+id: w5.instagram_dm_order
+workflow: 5
+description: >-
+  Instagram DM customer asks about a custom cake. Brand rule says
+  decoration is a small optional service; the agent should offer the
+  ready-line first and only escalate to owner approval if the customer
+  insists on full custom decoration.
+turns:
+  - user: "saw your napoleon on the feed, can you do it with my kid's name on top?"
+    expect:
+      contains_any:
+        - "cake \"Napoleon\""
+        - "owner"
+        - "Saule"
+      not_contains:
+        - "magical"   # banned adjective
+        - "Honey cake"  # cake-name placement violation
+  - user: "yes please, party is Saturday at 4pm"
+    expect:
+      contains_any:
+        - "24"   # 24h lead time for custom
+        - "lead time"
+        - "owner"
+      tool_calls_include:
+        - "kitchen_get_menu_constraints"

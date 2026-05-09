@@ -106,7 +106,7 @@ async def message_handler(
     session_id: str,
     owner_bridge: ClaudeBridge,
 ) -> None:
-    """Free-text from the owner. Routes through the ops persona."""
+    """Free-text from the owner. Streams agent progress through Telegram."""
     text = message.text
     if not text:
         await message.answer("(text-only for now)")
@@ -115,10 +115,49 @@ async def message_handler(
     await bot.send_chat_action(message.chat.id, "typing")
 
     history = await _load_history(session_id)
+    progress: dict[str, str] = {}  # tool_use_id → display name (mutating tools only)
+
+    async def on_event(event: dict[str, object]) -> None:
+        # Forward only the events that make the owner's wait legible. Skip
+        # text-deltas (too noisy), system/init lines, and read-only tools.
+        etype = event.get("type")
+        if etype == "stream_event":
+            inner = event.get("event") or {}
+            if not isinstance(inner, dict):
+                return
+            block = inner.get("content_block") or {}
+            if (
+                inner.get("type") == "content_block_start"
+                and isinstance(block, dict)
+                and block.get("type") == "tool_use"
+            ):
+                tool_name = block.get("name", "")
+                tool_id = block.get("id", "")
+                if not isinstance(tool_name, str) or not isinstance(tool_id, str):
+                    return
+                if _is_mutating_tool(tool_name):
+                    progress[tool_id] = _friendly_tool_name(tool_name)
+                    await message.answer(f"▶ {progress[tool_id]}…")
+            return
+        if etype == "user":
+            msg = event.get("message") or {}
+            if not isinstance(msg, dict):
+                return
+            for c in msg.get("content", []) or []:
+                if not isinstance(c, dict):
+                    continue
+                if c.get("type") == "tool_result":
+                    tool_id = c.get("tool_use_id", "")
+                    if isinstance(tool_id, str) and tool_id in progress:
+                        await message.answer(f"✓ {progress[tool_id]} done.")
+                        progress.pop(tool_id, None)
+
     try:
-        reply_text = await owner_bridge.query(text, history=history)
+        reply_text = await owner_bridge.query_streaming(
+            text, on_event, history=history
+        )
     except ClaudeBridgeError as exc:
-        log.error("owner_bridge.query_failed", err=str(exc))
+        log.error("owner_bridge.stream_failed", err=str(exc))
         await message.answer(
             "Couldn't reach the assistant just now — try again in a moment."
         )
@@ -140,6 +179,70 @@ async def message_handler(
         },
         session_id=session_id,
     )
+
+
+# Mutating MCP tools — surfaced to the owner so they see what the bot did.
+# Read-only tools (catalog, capacity, evidence-summary, etc.) stay silent
+# to keep Telegram from spamming during a multi-tool turn.
+_MUTATING_TOOL_PREFIXES: tuple[str, ...] = (
+    "mcp__happycake__square_create_order",
+    "mcp__happycake__square_update_order_status",
+    "mcp__happycake__kitchen_create_ticket",
+    "mcp__happycake__kitchen_accept_ticket",
+    "mcp__happycake__kitchen_reject_ticket",
+    "mcp__happycake__kitchen_mark_ready",
+    "mcp__happycake__marketing_create_campaign",
+    "mcp__happycake__marketing_launch_simulated_campaign",
+    "mcp__happycake__marketing_generate_leads",
+    "mcp__happycake__marketing_route_lead",
+    "mcp__happycake__marketing_adjust_campaign",
+    "mcp__happycake__marketing_report_to_owner",
+    "mcp__happycake__whatsapp_send",
+    "mcp__happycake__whatsapp_register_webhook",
+    "mcp__happycake__instagram_send_dm",
+    "mcp__happycake__instagram_reply_to_comment",
+    "mcp__happycake__instagram_schedule_post",
+    "mcp__happycake__instagram_approve_post",
+    "mcp__happycake__instagram_publish_post",
+    "mcp__happycake__instagram_register_webhook",
+    "mcp__happycake__gb_simulate_reply",
+    "mcp__happycake__gb_simulate_post",
+    "mcp__happycake__world_start_scenario",
+    "mcp__happycake__world_advance_time",
+    "mcp__happycake__world_inject_event",
+)
+
+
+def _is_mutating_tool(name: str) -> bool:
+    return any(name.startswith(p) for p in _MUTATING_TOOL_PREFIXES)
+
+
+def _friendly_tool_name(name: str) -> str:
+    """Render an mcp__happycake__square_create_order → 'Creating Square order'."""
+    base = name.removeprefix("mcp__happycake__")
+    pretty_map = {
+        "square_create_order": "Creating Square order",
+        "square_update_order_status": "Updating order status",
+        "kitchen_create_ticket": "Sending kitchen ticket",
+        "kitchen_accept_ticket": "Accepting kitchen ticket",
+        "kitchen_reject_ticket": "Rejecting kitchen ticket",
+        "kitchen_mark_ready": "Marking order ready",
+        "marketing_create_campaign": "Creating campaign",
+        "marketing_launch_simulated_campaign": "Launching campaign",
+        "marketing_generate_leads": "Generating leads",
+        "marketing_route_lead": "Routing lead",
+        "marketing_adjust_campaign": "Adjusting campaign",
+        "marketing_report_to_owner": "Filing owner report",
+        "whatsapp_send": "Sending WhatsApp message",
+        "instagram_send_dm": "Sending Instagram DM",
+        "instagram_reply_to_comment": "Replying to Instagram comment",
+        "instagram_schedule_post": "Scheduling Instagram post",
+        "instagram_approve_post": "Approving Instagram post",
+        "instagram_publish_post": "Publishing Instagram post",
+        "gb_simulate_reply": "Replying to Google review",
+        "gb_simulate_post": "Posting to Google Business",
+    }
+    return pretty_map.get(base, f"Calling {base}")
 
 
 async def _load_history(session_id: str) -> list[dict[str, Any]]:

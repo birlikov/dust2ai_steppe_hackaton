@@ -19,9 +19,17 @@ exchange of text in, one exchange of text out.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Mapping,
+)
 from dataclasses import dataclass, field
+from typing import Any
 
 from src.agents.system_prompt import load_owner_system_prompt, load_system_prompt
 from src.core.config import get_settings
@@ -34,6 +42,16 @@ Runner = Callable[
     [list[str], bytes, Mapping[str, str], float],
     Awaitable[tuple[int, bytes, bytes]],
 ]
+
+# Streaming runner — yields each stdout line as bytes (incl. trailing newline).
+# Wrapped in a no-arg callable so the dataclass can default-store the function.
+StreamingRunner = Callable[
+    [list[str], bytes, Mapping[str, str], float],
+    AsyncIterator[bytes],
+]
+
+# Callback type for streaming events: receives one parsed JSONL event at a time.
+EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class ClaudeBridgeError(RuntimeError):
@@ -69,6 +87,52 @@ async def _default_runner(
     return proc.returncode or 0, stdout, stderr
 
 
+async def _default_streaming_runner(
+    argv: list[str],
+    stdin: bytes,
+    env: Mapping[str, str],
+    timeout_s: float,
+) -> AsyncIterator[bytes]:
+    """Run ``claude -p --output-format stream-json`` and yield each stdout line.
+
+    Each yield is one JSONL line (terminated by ``\\n``). Lines that look
+    like partial JSON are buffered until a complete line lands.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *argv,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=dict(env),
+    )
+    if proc.stdin is not None:
+        proc.stdin.write(stdin)
+        await proc.stdin.drain()
+        proc.stdin.close()
+
+    deadline = asyncio.get_event_loop().time() + timeout_s
+    try:
+        assert proc.stdout is not None
+        while True:
+            remaining = max(0.5, deadline - asyncio.get_event_loop().time())
+            line = await asyncio.wait_for(proc.stdout.readline(), timeout=remaining)
+            if not line:
+                break
+            yield line
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise
+    finally:
+        # Ensure the process is reaped even if the consumer breaks early.
+        if proc.returncode is None:
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=2.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+
+
 @dataclass(slots=True)
 class ClaudeBridge:
     """Thin wrapper around ``claude -p`` for one-shot non-interactive prompts.
@@ -82,6 +146,9 @@ class ClaudeBridge:
     command: str = "claude"
     timeout_s: float = 120.0
     runner: Runner = field(default=_default_runner, repr=False)
+    streaming_runner: StreamingRunner = field(
+        default=_default_streaming_runner, repr=False
+    )
 
     async def query(
         self,
@@ -133,6 +200,92 @@ class ClaudeBridge:
             )
 
         return stdout.decode("utf-8", errors="replace").strip()
+
+    async def query_streaming(
+        self,
+        user_message: str,
+        on_event: EventCallback,
+        history: Iterable[Mapping[str, str]] | None = None,
+    ) -> str:
+        """Stream agent events while running one prompt through ``claude -p``.
+
+        The runtime emits JSONL events (``message_start``, ``content_block_start``
+        for tool calls, ``text_delta``, ``user`` events containing
+        ``tool_use_result``, and a final ``result`` event with the cleaned
+        assistant text). Each parsed event is forwarded to ``on_event``; the
+        bridge accumulates and returns the final assistant text.
+
+        Defensive parsing — malformed lines are logged and skipped, never raised.
+        """
+        body = _build_prompt_body(user_message, history)
+        env = {**os.environ, "ANTHROPIC_MODEL": self.model}
+        argv = [
+            self.command,
+            "-p",
+            "--permission-mode",
+            "bypassPermissions",
+            "--output-format",
+            "stream-json",
+            "--include-partial-messages",
+            "--verbose",
+            "--system-prompt",
+            self.system_prompt,
+        ]
+
+        final_text_parts: list[str] = []
+        try:
+            async for raw_line in self.streaming_runner(
+                argv, body.encode("utf-8"), env, self.timeout_s
+            ):
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    log.debug("claude_bridge.bad_json_line", err=str(exc))
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                try:
+                    await on_event(event)
+                except Exception:
+                    log.exception("claude_bridge.on_event_failed")
+                _accumulate_final_text(event, final_text_parts)
+        except TimeoutError as exc:
+            log.error("claude_bridge.stream_timeout", timeout=self.timeout_s)
+            raise ClaudeBridgeError(
+                f"claude -p timed out after {self.timeout_s:.0f}s"
+            ) from exc
+        except FileNotFoundError as exc:
+            raise ClaudeBridgeError(
+                f"claude CLI not found on PATH (looked for {self.command!r})."
+            ) from exc
+
+        return "".join(final_text_parts).strip()
+
+
+def _accumulate_final_text(
+    event: dict[str, Any], parts: list[str]
+) -> None:
+    """Pick out final-assistant text from streaming events."""
+    event_type = event.get("type")
+    if event_type == "result":
+        text = event.get("result")
+        if isinstance(text, str) and text:
+            parts.clear()
+            parts.append(text)
+        return
+    if event_type == "assistant":
+        message = event.get("message")
+        if isinstance(message, dict):
+            for block in message.get("content", []) or []:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(block.get("text"), str)
+                ):
+                    parts.append(block["text"])
 
 
 def _build_prompt_body(

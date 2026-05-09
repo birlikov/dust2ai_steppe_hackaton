@@ -101,12 +101,45 @@ _BANNED_ADJECTIVES: tuple[str, ...] = (
     "mouth-watering",
     "the best",
     "world-class",
+    "absolutely",
+    "extraordinary",
+    "phenomenal",
+    "spectacular",
+    "stunning",
+    "out of this world",
+    "second to none",
 )
 _RE_BANNED_ADJECTIVES = re.compile(
     r"(?<![A-Za-z])(" + "|".join(re.escape(w) for w in _BANNED_ADJECTIVES) + r")(?![A-Za-z])",
     re.IGNORECASE,
 )
-_RE_BUY_NOW = re.compile(r"\b(BUY NOW|buy now|don'?t miss out|limited offer)!*", re.IGNORECASE)
+
+# Ad clichés the brandbook explicitly bans (§2 examples + §7 voice rules).
+_AD_CLICHES: tuple[str, ...] = (
+    "BUY NOW",
+    "buy now",
+    "don't miss out",
+    "dont miss out",
+    "limited offer",
+    "limited time only",
+    "act now",
+    "hurry",
+    "exclusive offer",
+    "best deal ever",
+)
+_RE_AD_CLICHES = re.compile(
+    r"\b(" + "|".join(re.escape(p) for p in _AD_CLICHES) + r")!*",
+    re.IGNORECASE,
+)
+
+# Brandbook §2 — informal openings forbidden.
+_RE_INFORMAL_GREETING = re.compile(
+    r"\b(hey guys|yo guys|sup guys|what'?s up guys)\b", re.IGNORECASE
+)
+
+# Excessive exclamation (brandbook §2: "Order our amazing cakes today!!!" is
+# the canonical bad example). Three or more in a row is a hard signal.
+_RE_EXCLAMATION_TRIPLE = re.compile(r"!{3,}")
 
 
 # ---------------------------------------------------------------------------
@@ -207,8 +240,8 @@ def lint(request: LintRequest) -> list[Violation]:
                 excerpt=m_adj.group(0),
             )
         )
-    m_buy = _RE_BUY_NOW.search(text)
-    if m_buy:
+    m_cliche = _RE_AD_CLICHES.search(text)
+    if m_cliche:
         violations.append(
             Violation(
                 rule_id="brand.r10",
@@ -216,7 +249,30 @@ def lint(request: LintRequest) -> list[Violation]:
                     "ad cliché — close with the closing pattern, "
                     "not BUY NOW / limited-offer language."
                 ),
-                excerpt=m_buy.group(0),
+                excerpt=m_cliche.group(0),
+            )
+        )
+
+    m_greet = _RE_INFORMAL_GREETING.search(text)
+    if m_greet:
+        violations.append(
+            Violation(
+                rule_id="brand.r10",
+                message=(
+                    'informal opening "hey guys" — open with '
+                    '"Good morning, friends." or "Hi, <name>." (brandbook §2).'
+                ),
+                excerpt=m_greet.group(0),
+            )
+        )
+
+    m_excl = _RE_EXCLAMATION_TRIPLE.search(text)
+    if m_excl:
+        violations.append(
+            Violation(
+                rule_id="brand.r10",
+                message="excessive exclamation — at most one '!' per sentence (brandbook §2).",
+                excerpt=m_excl.group(0),
             )
         )
 

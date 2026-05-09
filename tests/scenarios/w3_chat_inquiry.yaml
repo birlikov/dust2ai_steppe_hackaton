@@ -1,0 +1,24 @@
+id: w3.chat_inquiry
+workflow: 3
+description: >-
+  On-site assistant fields a basic catalog inquiry. Confirms brand-voice
+  cake-name formatting and that the reply does not fabricate prices.
+turns:
+  - user: "Hi, what cakes do you have today?"
+    expect:
+      contains_any:
+        - "cake"
+        - "Honey"
+        - "today"
+      not_contains:
+        - "Happy Cake"      # wordmark must be one word
+        - "HC "             # banned abbreviation
+        - "Honey cake"      # cake-name placement violation
+  - user: "How much for the honey one?"
+    expect:
+      contains_any:
+        - "$"
+        - "USD"
+      not_contains:
+        - "around"          # specific quantities only
+        - "approximately"   # specific quantities only

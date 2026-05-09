@@ -208,3 +208,31 @@ def find_product(catalog: Mapping[str, Any], slug: str) -> dict[str, Any] | None
         if isinstance(p, Mapping) and p.get("slug") == slug:
             return dict(p)
     return None
+
+
+def lookup_variation(catalog: Mapping[str, Any], slug: str) -> str | None:
+    """Return the Square ``variationId`` for a slug, or ``None`` if missing.
+
+    Used by ``POST /api/order`` to translate the customer-facing slug into
+    the id ``square_create_order`` expects.
+    """
+    item = find_product(catalog, slug)
+    if item is None:
+        return None
+    raw = item.get("variationId")
+    return str(raw) if isinstance(raw, str) else None
+
+
+def lookup_kitchen_product(catalog: Mapping[str, Any], slug: str) -> str | None:
+    """Return the kitchen ``productId`` for a slug, or ``None`` if missing.
+
+    The kitchen MCP tool family uses a different namespace from Square — slices
+    are ``honey-cake-slice``, not ``sq_var_honey_cake_slice``. Slug → kitchen
+    productId mapping lives in the catalog payload (``kitchenProductId`` key
+    surfaced by ``shape_catalog``).
+    """
+    item = find_product(catalog, slug)
+    if item is None:
+        return None
+    raw = item.get("kitchenProductId")
+    return str(raw) if isinstance(raw, str) else None

@@ -65,6 +65,30 @@ def test_buy_now_flagged() -> None:
     assert rule_ids.count("brand.r10") >= 1
 
 
+def test_extended_banned_list_flagged() -> None:
+    violations = lint_text("Our extraordinary, phenomenal honey cake!")
+    msgs = " ".join(v.message for v in violations)
+    assert "extraordinary" in msgs.lower() or "phenomenal" in msgs.lower()
+
+
+def test_informal_greeting_flagged() -> None:
+    violations = lint_text("Hey guys, what's up — order our cake today.")
+    rule_ids = [v.rule_id for v in violations]
+    assert "brand.r10" in rule_ids
+
+
+def test_excessive_exclamation_flagged() -> None:
+    violations = lint_text('Cake "Honey" is back!!!')
+    rule_ids = [v.rule_id for v in violations]
+    assert "brand.r10" in rule_ids
+
+
+def test_act_now_hurry_flagged() -> None:
+    violations = lint_text("Act now! Hurry — exclusive offer ends Sunday.")
+    rule_ids = [v.rule_id for v in violations]
+    assert rule_ids.count("brand.r10") >= 1
+
+
 def test_cyrillic_flagged() -> None:
     violations = lint_text("Привет, у нас новый торт.")  # noqa: RUF001
     assert any(v.rule_id == "brand.r1" for v in violations)

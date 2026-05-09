@@ -1,0 +1,277 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="Checkout"
+  description="Place your HappyCake order. We&rsquo;ll have it ready as scheduled."
+  hideFloatingChat
+>
+  <section class="bg-cream-50">
+    <div class="max-w-3xl mx-auto px-4 py-10">
+      <p class="cake-name-label text-happy-blue-500 mb-2">◆ Checkout</p>
+      <h1 class="font-display text-3xl md:text-4xl text-happy-blue-900 leading-tight mb-2">
+        Just a few details.
+      </h1>
+      <p class="text-text-primary text-sm">
+        We&rsquo;ll confirm by WhatsApp within the hour and have your cake
+        ready as scheduled.
+      </p>
+    </div>
+  </section>
+
+  <section class="max-w-3xl mx-auto px-4 py-10 grid md:grid-cols-[1fr,360px] gap-10">
+    <!-- Left: customer form -->
+    <form id="checkout-form" class="space-y-5">
+      <div>
+        <label for="cust-name" class="block text-sm font-medium text-text-primary mb-1">Name</label>
+        <input
+          id="cust-name"
+          name="name"
+          type="text"
+          required
+          maxlength="200"
+          class="w-full px-3 py-2 border border-[rgba(14,42,60,0.4)] bg-white text-text-primary"
+        />
+      </div>
+      <div>
+        <label for="cust-contact" class="block text-sm font-medium text-text-primary mb-1">Phone or email</label>
+        <input
+          id="cust-contact"
+          name="contact"
+          type="text"
+          required
+          maxlength="200"
+          placeholder="+1 281 555 0100"
+          class="w-full px-3 py-2 border border-[rgba(14,42,60,0.4)] bg-white text-text-primary"
+        />
+      </div>
+
+      <fieldset>
+        <legend class="block text-sm font-medium text-text-primary mb-2">How would you like it?</legend>
+        <label class="inline-flex items-center mr-5 text-sm">
+          <input type="radio" name="fulfillment" value="pickup" checked class="mr-2"/>
+          Pickup
+        </label>
+        <label class="inline-flex items-center text-sm">
+          <input type="radio" name="fulfillment" value="delivery" class="mr-2"/>
+          Delivery (Sugar Land + close suburbs)
+        </label>
+      </fieldset>
+
+      <div>
+        <label for="cust-when" class="block text-sm font-medium text-text-primary mb-1">When (optional)</label>
+        <input
+          id="cust-when"
+          name="when"
+          type="datetime-local"
+          class="w-full px-3 py-2 border border-[rgba(14,42,60,0.4)] bg-white text-text-primary"
+        />
+        <p class="text-xs text-text-primary opacity-70 mt-1">
+          Leave blank for next available slot. Whole cakes need 24h notice.
+        </p>
+      </div>
+
+      <div>
+        <label for="cust-notes" class="block text-sm font-medium text-text-primary mb-1">Notes (optional)</label>
+        <textarea
+          id="cust-notes"
+          name="notes"
+          rows="2"
+          maxlength="500"
+          placeholder="ring the bell, no decorations, etc."
+          class="w-full px-3 py-2 border border-[rgba(14,42,60,0.4)] bg-white text-text-primary"
+        ></textarea>
+      </div>
+
+      <button
+        type="submit"
+        id="place-order"
+        class="btn-primary w-full"
+      >Place order</button>
+
+      <p id="checkout-error" class="text-sm text-accent-coral hidden"></p>
+    </form>
+
+    <!-- Right: cart summary -->
+    <aside class="card-border bg-cream-100 p-5 h-fit sticky top-6">
+      <h2 class="font-display text-xl font-semibold text-happy-blue-900 mb-3">Your basket</h2>
+      <ul id="cart-list" class="space-y-3 list-none m-0 p-0 text-sm"></ul>
+      <p id="cart-empty" class="text-sm text-text-primary opacity-70 hidden">
+        Basket is empty. <a href="/menu" class="text-happy-blue-500 underline">Browse the menu</a>.
+      </p>
+      <div id="cart-total" class="border-t border-[rgba(14,42,60,0.18)] mt-4 pt-3 flex justify-between font-semibold text-text-primary">
+        <span>Total</span>
+        <span id="cart-total-value">$0.00</span>
+      </div>
+    </aside>
+  </section>
+
+  <!-- Success state — toggled in via JS -->
+  <section id="checkout-success" class="hidden bg-cream-50 border-t border-[rgba(14,42,60,0.12)]">
+    <div class="max-w-3xl mx-auto px-4 py-12 text-center">
+      <p class="cake-name-label text-happy-blue-500 mb-2">◆ Order confirmed</p>
+      <h2 class="font-display text-3xl text-happy-blue-900 mb-3">Thank you.</h2>
+      <p class="text-text-primary text-sm mb-2">
+        Order id <code id="success-order" class="bg-cream-100 px-2 py-0.5 text-xs"></code>
+        — kitchen ticket <code id="success-ticket" class="bg-cream-100 px-2 py-0.5 text-xs"></code>.
+      </p>
+      <p class="text-text-primary text-sm mb-6" id="success-message"></p>
+      <p class="text-sm text-text-primary">
+        Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+
+  <script is:inline define:vars={{ apiBase: import.meta.env.PUBLIC_API_BASE ?? "" }}>
+    (function () {
+      "use strict";
+      var STORAGE_KEY = "hc_cart";
+
+      function readCart() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : [];
+        } catch (e) { return []; }
+      }
+
+      function writeCart(cart) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
+        window.dispatchEvent(new CustomEvent("hc-cart-changed"));
+      }
+
+      function renderCart() {
+        var cart = readCart();
+        var list = document.getElementById("cart-list");
+        var empty = document.getElementById("cart-empty");
+        var totalEl = document.getElementById("cart-total-value");
+        var placeBtn = document.getElementById("place-order");
+        if (!list || !empty || !totalEl || !placeBtn) return;
+
+        list.innerHTML = "";
+        var total = 0;
+        if (cart.length === 0) {
+          empty.classList.remove("hidden");
+          placeBtn.disabled = true;
+          placeBtn.classList.add("opacity-50", "cursor-not-allowed");
+        } else {
+          empty.classList.add("hidden");
+          placeBtn.disabled = false;
+          placeBtn.classList.remove("opacity-50", "cursor-not-allowed");
+          cart.forEach(function (line, idx) {
+            var lineTotal = (line.price || 0) * (line.quantity || 0);
+            total += lineTotal;
+            var li = document.createElement("li");
+            li.className = "flex items-start gap-3";
+            li.innerHTML =
+              '<img src="' + (line.image || "") + '" alt="" width="48" height="48" class="w-12 h-12 object-cover" />' +
+              '<div class="flex-1 min-w-0">' +
+                '<p class="text-sm font-medium text-text-primary leading-tight">' + escapeHtml(line.name || line.slug) + '</p>' +
+                '<p class="text-xs text-text-primary opacity-70 mt-0.5">$' + (line.price || 0).toFixed(2) + ' each</p>' +
+                '<div class="flex items-center gap-2 mt-2 text-xs">' +
+                  '<button type="button" data-action="decrement" data-idx="' + idx + '" class="px-2 py-0.5 border border-[rgba(14,42,60,0.4)]">−</button>' +
+                  '<span class="min-w-6 text-center">' + line.quantity + '</span>' +
+                  '<button type="button" data-action="increment" data-idx="' + idx + '" class="px-2 py-0.5 border border-[rgba(14,42,60,0.4)]">+</button>' +
+                  '<button type="button" data-action="remove" data-idx="' + idx + '" class="ml-auto text-happy-blue-500 hover:text-accent-coral">remove</button>' +
+                '</div>' +
+              '</div>' +
+              '<p class="text-sm font-medium text-happy-blue-900">$' + lineTotal.toFixed(2) + '</p>';
+            list.appendChild(li);
+          });
+        }
+        totalEl.textContent = "$" + total.toFixed(2);
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+
+      document.addEventListener("click", function (event) {
+        var target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        var action = target.dataset.action;
+        var idxRaw = target.dataset.idx;
+        if (!action || idxRaw === undefined) return;
+        var idx = parseInt(idxRaw, 10);
+        var cart = readCart();
+        if (idx < 0 || idx >= cart.length) return;
+        if (action === "increment") {
+          cart[idx].quantity = (cart[idx].quantity || 0) + 1;
+        } else if (action === "decrement") {
+          cart[idx].quantity = Math.max(1, (cart[idx].quantity || 0) - 1);
+        } else if (action === "remove") {
+          cart.splice(idx, 1);
+        }
+        writeCart(cart);
+        renderCart();
+      });
+
+      var form = document.getElementById("checkout-form");
+      if (form) {
+        form.addEventListener("submit", async function (event) {
+          event.preventDefault();
+          var cart = readCart();
+          if (cart.length === 0) return;
+
+          var name = document.getElementById("cust-name").value.trim();
+          var contact = document.getElementById("cust-contact").value.trim();
+          var fulfillmentType = (document.querySelector('input[name="fulfillment"]:checked') || {}).value || "pickup";
+          var when = document.getElementById("cust-when").value;
+          var notes = document.getElementById("cust-notes").value.trim();
+          var errorEl = document.getElementById("checkout-error");
+          errorEl.classList.add("hidden");
+
+          var btn = document.getElementById("place-order");
+          btn.disabled = true;
+          btn.textContent = "Placing your order…";
+
+          var body = {
+            items: cart.map(function (l) { return { slug: l.slug, quantity: l.quantity }; }),
+            customer: { name: name, contact: contact },
+            fulfillment: {
+              type: fulfillmentType,
+              at_iso: when ? new Date(when).toISOString() : undefined,
+              notes: notes || undefined,
+            },
+            source: "website",
+          };
+
+          try {
+            var res = await fetch(apiBase + "/api/order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify(body),
+            });
+            var data = await res.json().catch(function () { return {}; });
+            if (!res.ok || data.status === "failed") {
+              errorEl.textContent = data.message || "Something went wrong placing the order.";
+              errorEl.classList.remove("hidden");
+              btn.disabled = false;
+              btn.textContent = "Place order";
+              return;
+            }
+
+            // Success — clear cart, swap views
+            writeCart([]);
+            document.getElementById("success-order").textContent = data.order_id || "—";
+            document.getElementById("success-ticket").textContent = data.ticket_id || "—";
+            document.getElementById("success-message").textContent = data.message || "";
+            form.parentElement.classList.add("hidden");
+            document.getElementById("checkout-success").classList.remove("hidden");
+            window.scrollTo(0, 0);
+          } catch (err) {
+            errorEl.textContent = "Couldn't reach the kitchen — please try again.";
+            errorEl.classList.remove("hidden");
+            btn.disabled = false;
+            btn.textContent = "Place order";
+          }
+        });
+      }
+
+      document.addEventListener("DOMContentLoaded", renderCart);
+      window.addEventListener("hc-cart-changed", renderCart);
+    })();
+  </script>
+</BaseLayout>

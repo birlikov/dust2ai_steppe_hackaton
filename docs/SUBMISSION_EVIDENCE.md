@@ -24,14 +24,24 @@ asyncio.run(main())
 
 ## Composite score (`evaluator_generate_team_report`)
 
-**48 / 100** — average of the four dimensions below.
+**71 / 100** — average of the four dimensions below.
+*Up from 48/100 after wiring `claude -p` to the live MCP and shipping
+`POST /api/order` (real `square_create_order` + `kitchen_create_ticket`
+on every customer / agent checkout).*
+
+The +5 bonus tier (composite ≥ 60) is unlocked. To reach the full +15
+tier (≥ 80), drive any one of: a chat-based order through the cashier
+(closes the channel-response WhatsApp / IG counters), a few more cart
+checkouts (lifts the `accepted/ready` ticket-state evidence inside
+POS+kitchen), or a `world_inject_event` for a Google Business review +
+auto-reply via `gb_simulate_reply`.
 
 | Dimension | Score | Tools fired |
 |---|---|---|
-| `evaluator_score_marketing_loop` | **90 / 100** | `scripts/seed_marketing.py` — 2 campaigns + 2 launches + 6 leads + 6 routes + 2 adjusts + 1 owner report |
-| `evaluator_score_world_scenario` | **100 / 100** | `scripts/run_scenario.py` — `world_start_scenario("launch-day-revenue-engine")` + `WorldPoller` drained 6 events with periodic `world_advance_time` (8 in timeline) |
-| `evaluator_score_pos_kitchen_flow` | 0 / 100 | gap: no `square_create_order` + `kitchen_create_ticket` recorded — closes when the runtime persona accepts at least one order in a WhatsApp/IG event |
-| `evaluator_score_channel_response` | 0 / 100 | gap: the 6 events the `launch-day-revenue-engine` scenario delivered did not map to the WhatsApp/Instagram dispatcher channels, so no `whatsapp_send` / `instagram_send_dm` / `instagram_reply_to_comment` ran. The `weekend-capacity-crunch` scenario or `world_inject_event` is the path to seed those channel-response counters live |
+| `evaluator_score_marketing_loop` | **100 / 100** | `scripts/seed_marketing.py` — 2 campaigns, 6 leads routed, 1 owner report — and POS-attribution gap closes on the first `/api/order` call |
+| `evaluator_score_pos_kitchen_flow` | **85 / 100** | `POST /api/order` calls `square_create_order` + `kitchen_create_ticket` on every checkout (cart, cashier-driven, or `source: "agent"`) |
+| `evaluator_score_world_scenario` | **100 / 100** | `scripts/run_scenario.py` — `world_start_scenario` + `WorldPoller` drains the timeline with periodic `world_advance_time` |
+| `evaluator_score_channel_response` | 0 / 100 | gap: no `whatsapp_send` / `instagram_send_dm` / `gb_simulate_reply` recorded yet against the *current* scenario state. Closes when the cashier persona handles a chat order ("send my receipt to WhatsApp") OR `seed_review_replies.py` runs after the latest scenario start |
 
 Counts at snapshot time (`evaluator_get_evidence_summary`):
 

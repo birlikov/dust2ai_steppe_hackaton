@@ -1,0 +1,24 @@
+id: w4.whatsapp_order
+workflow: 4
+description: >-
+  WhatsApp customer messages with a same-day order. Asserts the bot
+  acknowledges, surfaces the kitchen lead time, and ends with the brand
+  closing pattern (or the WhatsApp-shortened equivalent).
+turns:
+  - user: "Hi! Can I get a honey cake by 5pm today?"
+    expect:
+      contains_any:
+        - "cake \"Honey\""
+        - "kitchen"
+        - "ready"
+      not_contains:
+        - "BUY NOW"
+        - "Hey guys"
+  - user: "Yes please, my name is Maria, +1 281 555 0100"
+    expect:
+      contains_any:
+        - "confirm"
+        - "thank"
+        - "ready"
+      tool_calls_include:
+        - "kitchen_get_capacity"

@@ -21,10 +21,12 @@ client at boot and closes them on shutdown.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -46,7 +48,12 @@ from src.mcp.http_client import (
 from src.storage import drafts
 from src.storage.audit import record
 from src.webhooks.security import verify_signature
-from src.webhooks.storefront import policies_payload, shape_catalog
+from src.webhooks.storefront import (
+    lookup_kitchen_product,
+    lookup_variation,
+    policies_payload,
+    shape_catalog,
+)
 from src.workflows.orchestrator import (
     Orchestrator,
     OrchestratorError,
@@ -100,6 +107,44 @@ class LeadRequest(BaseModel):
 class LeadResponse(BaseModel):
     status: str
     lead_id: str
+
+
+# --- /api/order — real order creation against the simulator ----------------
+
+
+class OrderItem(BaseModel):
+    slug: str = Field(min_length=1, max_length=120)
+    quantity: int = Field(ge=1, le=20)
+
+
+class OrderCustomer(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    contact: str = Field(min_length=3, max_length=200)
+    channel_preference: str | None = Field(default=None, max_length=40)
+
+
+class OrderFulfillment(BaseModel):
+    type: str = Field(default="pickup", pattern="^(pickup|delivery)$")
+    at_iso: str | None = Field(default=None, max_length=40)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class OrderRequest(BaseModel):
+    items: list[OrderItem] = Field(min_length=1, max_length=12)
+    customer: OrderCustomer
+    fulfillment: OrderFulfillment = Field(default_factory=OrderFulfillment)
+    source: str = Field(default="website", pattern="^(website|agent|telegram|walk-in)$")
+    idempotency_key: str | None = Field(default=None, max_length=120)
+
+
+class OrderResponse(BaseModel):
+    status: str
+    order_id: str | None = None
+    ticket_id: str | None = None
+    ready_at_iso: str | None = None
+    total_usd: float | None = None
+    estimated_lead_minutes: int | None = None
+    message: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +334,166 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
         return LeadResponse(status="received", lead_id=lead.id)
 
     # ------------------------------------------------------------------
+    # /api/order — real POS + kitchen creation
+    # ------------------------------------------------------------------
+    @app.post("/api/order", response_model=OrderResponse)
+    async def api_order(payload: OrderRequest) -> JSONResponse:
+        client: HappycakeMcpClient | None = getattr(app.state, "mcp_client", None)
+        if client is None:
+            return JSONResponse(
+                status_code=503,
+                content=OrderResponse(
+                    status="failed",
+                    message=(
+                        "Ordering is paused — the kitchen system is unreachable. "
+                        "Please try again in a moment."
+                    ),
+                ).model_dump(exclude_none=True),
+            )
+
+        # Resolve every slug against a fresh catalog snapshot.
+        try:
+            raw_catalog = await call_with_retry(client, "square_list_catalog", {})
+            kitchen_capacity = await call_with_retry(client, "kitchen_get_capacity", {})
+        except (McpTransportError, McpError) as exc:
+            log.error("order.catalog_fetch_failed", err=str(exc))
+            return JSONResponse(
+                status_code=503,
+                content=OrderResponse(
+                    status="failed",
+                    message="Couldn't reach the catalog — try again in a moment.",
+                ).model_dump(exclude_none=True),
+            )
+        catalog = shape_catalog(raw_catalog, kitchen=kitchen_capacity)
+
+        square_items: list[dict[str, Any]] = []
+        kitchen_items: list[dict[str, Any]] = []
+        total_cents = 0
+        max_lead = 0
+        for item in payload.items:
+            variation_id = lookup_variation(catalog, item.slug)
+            kitchen_pid = lookup_kitchen_product(catalog, item.slug)
+            if variation_id is None or kitchen_pid is None:
+                return JSONResponse(
+                    status_code=400,
+                    content=OrderResponse(
+                        status="failed",
+                        message=f"Unknown item: {item.slug!r}.",
+                    ).model_dump(exclude_none=True),
+                )
+            product: dict[str, Any] = next(
+                (
+                    dict(p)
+                    for p in catalog.get("products", [])
+                    if isinstance(p, dict) and p.get("slug") == item.slug
+                ),
+                {},
+            )
+            price_usd = product.get("priceUsd") or 0
+            total_cents += int(price_usd * 100) * item.quantity
+            lead = product.get("leadTimeMinutes") or 0
+            if isinstance(lead, int) and lead > max_lead:
+                max_lead = lead
+            square_items.append(
+                {"variationId": variation_id, "quantity": item.quantity}
+            )
+            kitchen_items.append(
+                {"productId": kitchen_pid, "quantity": item.quantity}
+            )
+
+        idempotency_key = payload.idempotency_key or _derive_order_key(payload)
+        customer_note = _compose_customer_note(payload)
+
+        # 1) Create the POS order.
+        try:
+            order_resp = await call_with_retry(
+                client,
+                "square_create_order",
+                {
+                    "items": square_items,
+                    "source": payload.source,
+                    "customerName": payload.customer.name,
+                    "customerNote": customer_note,
+                    "idempotencyKey": idempotency_key,
+                },
+            )
+        except (McpTransportError, McpError) as exc:
+            log.error("order.square_create_failed", err=str(exc))
+            return JSONResponse(
+                status_code=502,
+                content=OrderResponse(
+                    status="failed",
+                    message="The kitchen couldn't take the order — please try again.",
+                ).model_dump(exclude_none=True),
+            )
+        order_id = _extract_id(order_resp, "orderId") or _extract_id(order_resp, "id")
+        if not order_id:
+            log.error("order.square_no_id", raw=str(order_resp)[:200])
+            return JSONResponse(
+                status_code=502,
+                content=OrderResponse(
+                    status="failed",
+                    message="The order system gave an unexpected response.",
+                ).model_dump(exclude_none=True),
+            )
+
+        # 2) Hand off to the kitchen.
+        ticket_id: str | None = None
+        kitchen_status = "confirmed"
+        try:
+            ticket_resp = await call_with_retry(
+                client,
+                "kitchen_create_ticket",
+                {
+                    "orderId": order_id,
+                    "customerName": payload.customer.name,
+                    "items": kitchen_items,
+                    "requestedPickupAt": payload.fulfillment.at_iso,
+                    "notes": payload.fulfillment.notes,
+                },
+            )
+            ticket_id = _extract_id(ticket_resp, "ticketId") or _extract_id(ticket_resp, "id")
+        except (McpTransportError, McpError) as exc:
+            kitchen_status = "kitchen_pending"
+            log.warning(
+                "order.kitchen_create_failed",
+                err=str(exc),
+                order_id=order_id,
+            )
+
+        # 3) Audit + best-effort owner notify.
+        await record(
+            "user",
+            "inbound",
+            {
+                "kind": "order",
+                "order_id": order_id,
+                "ticket_id": ticket_id,
+                "source": payload.source,
+                "items": [item.model_dump() for item in payload.items],
+                "total_cents": total_cents,
+            },
+        )
+
+        ready_at = payload.fulfillment.at_iso
+
+        return JSONResponse(
+            content=OrderResponse(
+                status=kitchen_status,
+                order_id=order_id,
+                ticket_id=ticket_id,
+                ready_at_iso=ready_at,
+                total_usd=round(total_cents / 100, 2),
+                estimated_lead_minutes=max_lead or None,
+                message=(
+                    "Order received. We'll have it ready as scheduled."
+                    if kitchen_status == "confirmed"
+                    else "Order recorded; the kitchen ticket will be created shortly."
+                ),
+            ).model_dump(exclude_none=True)
+        )
+
+    # ------------------------------------------------------------------
     # Meta-shaped webhooks (kept from Phase 0)
     # ------------------------------------------------------------------
     @app.get("/webhook/{channel}")
@@ -344,6 +549,49 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
 
 def _new_external_id() -> str:
     return str(uuid.uuid4())
+
+
+def _derive_order_key(payload: OrderRequest) -> str:
+    """Compute an idempotency key that survives same-minute retries."""
+    bucket = datetime.now(UTC).strftime("%Y%m%dT%H%M")
+    summary = "|".join(
+        f"{item.slug}x{item.quantity}" for item in payload.items
+    )
+    raw = f"{bucket}|{payload.customer.contact}|{summary}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def _compose_customer_note(payload: OrderRequest) -> str:
+    parts: list[str] = [f"{payload.fulfillment.type.title()}"]
+    if payload.fulfillment.at_iso:
+        parts.append(f"at {payload.fulfillment.at_iso}")
+    if payload.customer.channel_preference:
+        parts.append(f"reach via {payload.customer.channel_preference}")
+    if payload.fulfillment.notes:
+        parts.append(payload.fulfillment.notes)
+    return ". ".join(parts)
+
+
+def _extract_id(obj: Any, key: str) -> str | None:
+    """Pull an id off either the top level or a nested ``order``/``ticket`` dict."""
+    if not isinstance(obj, dict):
+        return None
+    v = obj.get(key)
+    if isinstance(v, str):
+        return v
+    # The simulator wraps responses: {"mode": "...", "order": {"id": "..."}}
+    for nested_key in ("order", "ticket", "data", "result"):
+        nested = obj.get(nested_key)
+        if isinstance(nested, dict):
+            v = nested.get("id") or nested.get(key)
+            if isinstance(v, str):
+                return v
+    # Fallback: a generic top-level "id" if the requested key wasn't found.
+    if key != "id":
+        v = obj.get("id")
+        if isinstance(v, str):
+            return v
+    return None
 
 
 app = build_app()

@@ -1,0 +1,34 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CatalogGrid from "../components/CatalogGrid.astro";
+---
+
+<BaseLayout
+  title="The menu"
+  description={`Browse the HappyCake catalog. Cake "Honey", cake "Pistachio Roll", custom cakes — order on the site or by WhatsApp.`}
+>
+  <section class="bg-cream-50">
+    <div class="max-w-5xl mx-auto px-4 py-12 md:py-16">
+      <p class="cake-name-label text-happy-blue-500 mb-2">◆ HappyCake · Sugar Land, TX</p>
+      <h1 class="font-display text-4xl md:text-5xl text-happy-blue-900 leading-tight mb-3">
+        Browse the menu.
+      </h1>
+      <p class="text-text-primary text-base leading-relaxed max-w-2xl">
+        Add a cake to your basket, then check out — we'll have it ready as
+        scheduled. Prefer to chat? The
+        <a href="/" class="text-happy-blue-500 underline">cashier on the homepage</a>
+        will help you pick.
+      </p>
+    </div>
+  </section>
+
+  <CatalogGrid />
+
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-8">
+    <div class="max-w-5xl mx-auto px-4 text-center">
+      <p class="text-text-primary text-sm">
+        Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+</BaseLayout>
