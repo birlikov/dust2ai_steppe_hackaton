@@ -16,7 +16,7 @@ from aiogram.types import Message
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.core.logging import get_logger
-from src.storage import sessions
+from src.storage import drafts, sessions
 from src.storage.audit import record
 
 router = Router(name="commands")
@@ -24,10 +24,13 @@ log = get_logger(__name__)
 
 HELP_TEXT = (
     "Available commands:\n"
-    "/start    — begin a session\n"
-    "/help     — show this message\n"
-    "/cancel   — cancel the current operation\n"
-    "/restart  — wipe state and start over\n"
+    "/start      — begin a session\n"
+    "/help       — show this message\n"
+    "/dashboard  — sales, kitchen, evaluator snapshot\n"
+    "/budget     — marketing budget + recent leads\n"
+    "/drafts     — review pending drafts (Approve / Edit / Reject)\n"
+    "/cancel     — cancel the current operation\n"
+    "/restart    — wipe state and start over\n"
 )
 
 HISTORY_CAP = 24  # last N user/assistant text turns persisted per session
@@ -37,8 +40,13 @@ HISTORY_CAP = 24  # last N user/assistant text turns persisted per session
 async def cmd_start(message: Message, state: FSMContext, session_id: str) -> None:
     await state.clear()
     await sessions.merge_state(session_id, {"messages": []})
+    if message.from_user is not None:
+        await drafts.remember_owner(
+            chat_id=message.chat.id,
+            username=message.from_user.username,
+        )
     await message.answer(
-        "Ready. I'm your operations assistant.\n"
+        "Ready. I'm your HappyCake operations assistant.\n"
         "Send /help to see what I can do."
     )
     await record("agent", "outbound", {"text": "start ack"}, session_id=session_id)

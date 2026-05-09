@@ -1,0 +1,337 @@
+---
+/**
+ * /order — Lead form.
+ * Covers w1.ac4 (UTM attribution), w2.ac4 (predictable form fields),
+ * w2.ec2 (field-level errors on 4xx).
+ *
+ * Static page — UTM capture and form submission handled by client-side TS.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { fetchCatalog } from "../lib/api";
+
+// Fetch catalog to populate the item selector
+const catalog = await fetchCatalog();
+const products = catalog?.products ?? [];
+---
+
+<BaseLayout
+  title="Order a cake"
+  description="Order a cake from HappyCake Sugar Land, TX. Pickup or delivery. Reply within the hour."
+>
+  <section class="bg-happy-blue-900 text-text-on-blue py-12">
+    <div class="max-w-5xl mx-auto px-4">
+      <p class="text-happy-blue-200 cake-name-label mb-2">◆ HappyCake · Sugar Land</p>
+      <h1 class="font-display text-4xl font-semibold text-cream-50">Order a cake</h1>
+      <p class="text-happy-blue-200 text-sm mt-2">We reply within the hour to confirm your order.</p>
+    </div>
+  </section>
+
+  <section class="max-w-5xl mx-auto px-4 py-12">
+    <div class="max-w-xl">
+      <!-- Success state — hidden by default, shown via JS -->
+      <div id="order-success" class="hidden bg-cream-100 card-border p-8 text-center mb-6">
+        <h2 class="font-display text-2xl font-semibold text-happy-blue-900 mb-3">
+          Your order request is received.
+        </h2>
+        <p class="text-sm text-text-primary mb-4">
+          The HappyCake team will be in touch within the hour to confirm details.
+        </p>
+        <p class="text-sm text-text-primary closing-pattern">
+          Order on the site at happycake.us or send a message on WhatsApp.
+        </p>
+      </div>
+
+      <!-- Order form -->
+      <form
+        id="order-form"
+        class="space-y-5"
+        novalidate
+      >
+        <!-- w2.ac4 predictable field names -->
+        <div>
+          <label for="name" class="block text-sm font-medium text-text-primary mb-1">
+            Your name <span class="text-accent-coral">*</span>
+          </label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            required
+            autocomplete="given-name"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-happy-blue-500"
+            placeholder="Maria"
+          />
+          <p id="name-error" class="text-xs text-accent-coral mt-1 hidden"></p>
+        </div>
+
+        <div>
+          <label for="contact" class="block text-sm font-medium text-text-primary mb-1">
+            Phone or WhatsApp <span class="text-accent-coral">*</span>
+          </label>
+          <input
+            type="tel"
+            id="contact"
+            name="contact"
+            required
+            autocomplete="tel"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-happy-blue-500"
+            placeholder="+1 281 555 0100"
+          />
+          <p id="contact-error" class="text-xs text-accent-coral mt-1 hidden"></p>
+        </div>
+
+        <div>
+          <label for="intent" class="block text-sm font-medium text-text-primary mb-1">
+            What would you like to order? <span class="text-accent-coral">*</span>
+          </label>
+          {products.length > 0 ? (
+            <select
+              id="intent"
+              name="intent"
+              required
+              class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-happy-blue-500"
+            >
+              <option value="">Select a cake…</option>
+              {products.map((p) => (
+                <option value={p.name}>{p.name} — {p.priceFormatted}</option>
+              ))}
+              <option value="custom">Something else / custom enquiry</option>
+            </select>
+          ) : (
+            <input
+              type="text"
+              id="intent"
+              name="intent"
+              required
+              class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-happy-blue-500"
+              placeholder='e.g. "cake &quot;Honey&quot; for Saturday"'
+            />
+          )}
+          <p id="intent-error" class="text-xs text-accent-coral mt-1 hidden"></p>
+        </div>
+
+        <div>
+          <label for="quantity" class="block text-sm font-medium text-text-primary mb-1">
+            Quantity
+          </label>
+          <input
+            type="number"
+            id="quantity"
+            name="quantity"
+            min="1"
+            max="20"
+            value="1"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-happy-blue-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-text-primary mb-2">
+            Pickup or delivery?
+          </label>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="radio" name="pickup_or_delivery" value="pickup" checked class="accent-happy-blue-700" />
+              Pickup
+            </label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="radio" name="pickup_or_delivery" value="delivery" class="accent-happy-blue-700" />
+              Delivery
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label for="pickup_date" class="block text-sm font-medium text-text-primary mb-1">
+            Preferred date
+          </label>
+          <input
+            type="date"
+            id="pickup_date"
+            name="pickup_date"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-happy-blue-500"
+          />
+        </div>
+
+        <div>
+          <label for="notes" class="block text-sm font-medium text-text-primary mb-1">
+            Any notes (optional)
+          </label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows="3"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-happy-blue-500 resize-none"
+            placeholder="Allergens, inscription on the cake, delivery address…"
+          ></textarea>
+        </div>
+
+        <!-- Hidden attribution fields — populated by JS from URL params (w1.ac4) -->
+        <input type="hidden" id="utm_source" name="utm_source" value="" />
+        <input type="hidden" id="utm_campaign" name="utm_campaign" value="" />
+        <input type="hidden" id="page" name="page" value="/order" />
+
+        <!-- Global form error -->
+        <p id="form-error" class="text-xs text-accent-coral hidden"></p>
+
+        <button
+          type="submit"
+          id="submit-btn"
+          class="btn-primary w-full text-center"
+        >
+          Send order request
+        </button>
+      </form>
+
+      <p class="text-xs text-text-primary opacity-60 mt-4">
+        We reply within the hour to confirm your order and arrange pickup or delivery.
+      </p>
+    </div>
+  </section>
+
+  <!-- Closing pattern (brand.r8) -->
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-8">
+    <div class="max-w-5xl mx-auto px-4">
+      <p class="text-sm text-text-primary closing-pattern">
+        Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+</BaseLayout>
+
+<script>
+  // ─── Order form handler ────────────────────────────────────────────────────
+  // Handles UTM capture (w1.ac4), form submission to /api/lead,
+  // and field-level error display (w2.ec2).
+
+  const API_BASE = import.meta.env.PUBLIC_API_BASE ?? "http://localhost:8000";
+
+  function el<T extends HTMLElement>(id: string): T {
+    return document.getElementById(id) as T;
+  }
+
+  function showError(fieldId: string, message: string) {
+    const errEl = el(`${fieldId}-error`);
+    if (errEl) {
+      errEl.textContent = message;
+      errEl.classList.remove("hidden");
+    }
+  }
+
+  function clearErrors() {
+    ["name-error", "contact-error", "intent-error", "form-error"].forEach((id) => {
+      const errEl = el(id);
+      if (errEl) errEl.classList.add("hidden");
+    });
+  }
+
+  // Capture UTM params from URL (w1.ac4)
+  function captureUtm() {
+    const params = new URLSearchParams(window.location.search);
+    const utmSource = params.get("utm_source") ?? "";
+    const utmCampaign = params.get("utm_campaign") ?? "";
+    const slug = params.get("slug") ?? "";
+
+    (el("utm_source") as HTMLInputElement).value = utmSource;
+    (el("utm_campaign") as HTMLInputElement).value = utmCampaign;
+
+    // Pre-fill intent if slug provided
+    if (slug) {
+      const intentEl = el("intent") as HTMLSelectElement | HTMLInputElement;
+      if (intentEl && intentEl.tagName === "SELECT") {
+        const select = intentEl as HTMLSelectElement;
+        for (let i = 0; i < select.options.length; i++) {
+          if (select.options[i].value.toLowerCase().includes(slug.replace(/-/g, " "))) {
+            select.selectedIndex = i;
+            break;
+          }
+        }
+      } else if (intentEl) {
+        (intentEl as HTMLInputElement).value = slug;
+      }
+    }
+
+    // Pre-fill quantity
+    const qty = params.get("qty");
+    if (qty) {
+      (el("quantity") as HTMLInputElement).value = qty;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    captureUtm();
+
+    const form = el("order-form") as HTMLFormElement;
+    const submitBtn = el("submit-btn") as HTMLButtonElement;
+    const successEl = el("order-success") as HTMLDivElement;
+    const formErrorEl = el("form-error") as HTMLParagraphElement;
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearErrors();
+
+      const data = new FormData(form);
+
+      const payload: Record<string, unknown> = {
+        name: (data.get("name") as string)?.trim(),
+        contact: (data.get("contact") as string)?.trim(),
+        intent: (data.get("intent") as string)?.trim(),
+        channel_preference: "website",
+        utm_source: data.get("utm_source") as string || undefined,
+        utm_campaign: data.get("utm_campaign") as string || undefined,
+        page: "/order",
+      };
+
+      const qty = parseInt(data.get("quantity") as string, 10);
+      if (!isNaN(qty) && qty > 0) payload.quantity = qty;
+
+      const pickupOrDelivery = data.get("pickup_or_delivery") as string;
+      if (pickupOrDelivery) payload.pickup_or_delivery = pickupOrDelivery;
+
+      const pickupDate = data.get("pickup_date") as string;
+      if (pickupDate) payload.pickup_date = pickupDate;
+
+      const notes = (data.get("notes") as string)?.trim();
+      if (notes) payload.intent = `${payload.intent}. Notes: ${notes}`;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending…";
+
+      try {
+        const res = await fetch(`${API_BASE}/api/lead`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          form.classList.add("hidden");
+          successEl.classList.remove("hidden");
+          return;
+        }
+
+        if (res.status === 400) {
+          // Field-level errors (w2.ec2)
+          const body = await res.json();
+          const errors: Record<string, string> = body.detail ?? {};
+          for (const [field, msg] of Object.entries(errors)) {
+            showError(field, msg as string);
+          }
+          if (!Object.keys(errors).length) {
+            formErrorEl.textContent = "Please check your details and try again.";
+            formErrorEl.classList.remove("hidden");
+          }
+        } else {
+          formErrorEl.textContent = "Something went wrong. Please try again or message us on WhatsApp.";
+          formErrorEl.classList.remove("hidden");
+        }
+      } catch {
+        formErrorEl.textContent = "Could not reach the server. Please try again or message us on WhatsApp.";
+        formErrorEl.classList.remove("hidden");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Send order request";
+      }
+    });
+  });
+</script>

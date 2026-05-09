@@ -1,0 +1,141 @@
+---
+/**
+ * /about — Brand story / Company content group.
+ * Covers w1.ac1 (all elements reachable from homepage) and brandbook §5 Company content group.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="About HappyCake"
+  description="The story behind HappyCake Sugar Land, TX — real cakes, made by hand, the original taste of happiness."
+>
+  <!-- Page hero -->
+  <section class="bg-happy-blue-900 text-text-on-blue py-16">
+    <div class="max-w-5xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
+      <div>
+        <p class="text-happy-blue-200 cake-name-label mb-3">◆ Our story</p>
+        <h1 class="font-display text-5xl font-semibold text-cream-50 leading-tight mb-4">
+          Real cakes,<br />made by hand.
+        </h1>
+        <p class="text-happy-blue-200 text-base leading-relaxed">
+          It started with a phrase: &ldquo;It&rsquo;s just like homemade.&rdquo; That sentence shaped everything we do.
+        </p>
+      </div>
+      <div class="hidden md:block">
+        <img
+          src="/brand/hero/happy-cake-hero-03.webp"
+          alt="The HappyCake Sugar Land team at work"
+          width="480"
+          height="360"
+          class="w-full object-cover"
+          loading="eager"
+        />
+      </div>
+    </div>
+  </section>
+
+  <!-- Manifesto -->
+  <section class="max-w-5xl mx-auto px-4 py-14">
+    <div class="max-w-2xl">
+      <h2 class="font-display text-3xl font-semibold text-happy-blue-900 mb-6">
+        How HappyCake started
+      </h2>
+      <p class="text-base text-text-primary leading-relaxed mb-4">
+        We started baking cakes. As if for ourselves. Delicious, sweet, fresh cakes. People kept coming back saying &ldquo;It tastes like I baked it myself&rdquo; and &ldquo;It tastes so good — like real home baking&rdquo;. And we realised that homemade taste was the centre of what we wanted to make.
+      </p>
+      <p class="text-base text-text-primary leading-relaxed mb-4">
+        Every ingredient is carefully selected. Every cake is hand-decorated and hand-packed. Every recipe was perfected over years until it earned its name.
+      </p>
+      <p class="text-base text-text-primary leading-relaxed mb-4">
+        When customers choose our cakes for the moments that matter — birthdays, anniversaries, the quiet week-night dinner — our hearts cheer and sink at once. That mix of pride and responsibility is what keeps us improving every day.
+      </p>
+      <p class="text-base text-text-primary leading-relaxed">
+        We love watching people be happy. We love making delicious things. The combination is HappyCake.
+      </p>
+    </div>
+  </section>
+
+  <!-- Values -->
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-14">
+    <div class="max-w-5xl mx-auto px-4">
+      <h2 class="font-display text-3xl font-semibold text-happy-blue-900 mb-8">What we believe</h2>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="card-border bg-cream-50 p-6">
+          <h3 class="font-display text-lg font-semibold text-happy-blue-900 mb-2">Open and honest</h3>
+          <p class="text-sm text-text-primary leading-relaxed">
+            We share the way we run this business — the wins and the imperfect days. Nothing about HappyCake is staged. We don&rsquo;t delete negative comments; we answer them. We&rsquo;re in dialogue with the people who eat our cakes.
+          </p>
+        </div>
+        <div class="card-border bg-cream-50 p-6">
+          <h3 class="font-display text-lg font-semibold text-happy-blue-900 mb-2">Creating value</h3>
+          <p class="text-sm text-text-primary leading-relaxed">
+            A cake is more than a cake. It&rsquo;s emotion, care, and warmth. We believe that and we work for it. Every detail of the order, the box, the slice, the moment — counts.
+          </p>
+        </div>
+        <div class="card-border bg-cream-50 p-6">
+          <h3 class="font-display text-lg font-semibold text-happy-blue-900 mb-2">Confident</h3>
+          <p class="text-sm text-text-primary leading-relaxed">
+            We work daily on the only thing that matters: making sure the cake will be delicious. Confidence comes from the work, not from talking about the work.
+          </p>
+        </div>
+        <div class="card-border bg-cream-50 p-6">
+          <h3 class="font-display text-lg font-semibold text-happy-blue-900 mb-2">Happy</h3>
+          <p class="text-sm text-text-primary leading-relaxed">
+            HappyCake is not HappyCake unless it brings happiness and joy. Every cake we make, every interaction we have, is a chance to add a brighter moment to someone&rsquo;s day.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Team / behind the scenes -->
+  <section class="max-w-5xl mx-auto px-4 py-14">
+    <div class="grid md:grid-cols-2 gap-12 items-center">
+      <div>
+        <img
+          src="/brand/social/happy-cake-social-01.webp"
+          alt="Behind the counter at HappyCake Sugar Land"
+          width="480"
+          height="360"
+          class="w-full object-cover card-border"
+          loading="lazy"
+        />
+      </div>
+      <div>
+        <p class="cake-name-label text-happy-blue-500 mb-2">Tuesday morning at HappyCake</p>
+        <h2 class="font-display text-2xl font-semibold text-happy-blue-900 mb-4">
+          No shortcuts. No mixes.
+        </h2>
+        <p class="text-base text-text-primary leading-relaxed mb-3">
+          Saule starts the honey biscuit at 6:30. The walnuts are toasted in small batches. By 9:00 the first cake &ldquo;Honey&rdquo; is cooling on the rack and the shop opens.
+        </p>
+        <p class="text-base text-text-primary leading-relaxed">
+          The taste your grandmother would recognise.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Photo grid — social images -->
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-14">
+    <div class="max-w-5xl mx-auto px-4">
+      <h2 class="font-display text-2xl font-semibold text-happy-blue-900 mb-6">From the kitchen</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <img src="/brand/social/happy-cake-social-02.webp" alt="HappyCake kitchen — frosting being applied" width="240" height="240" class="w-full h-40 object-cover card-border" loading="lazy" />
+        <img src="/brand/social/happy-cake-social-03.webp" alt="HappyCake Sugar Land — detail shot" width="240" height="240" class="w-full h-40 object-cover card-border" loading="lazy" />
+        <img src="/brand/social/happy-cake-social-04.webp" alt="HappyCake — freshly packed box" width="240" height="240" class="w-full h-40 object-cover card-border" loading="lazy" />
+        <img src="/brand/hero/happy-cake-hero-04.webp" alt="HappyCake Sugar Land shopfront" width="240" height="240" class="w-full h-40 object-cover card-border" loading="lazy" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Closing pattern (brand.r8) -->
+  <section class="bg-happy-blue-900 py-8">
+    <div class="max-w-5xl mx-auto px-4 text-center">
+      <p class="text-text-on-blue text-sm closing-pattern">
+        Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

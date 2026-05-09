@@ -12,7 +12,7 @@ from src.storage.db import get_connection
 
 Actor = Literal["user", "agent", "tool", "system"]
 EventType = Literal[
-    "inbound", "outbound", "tool_call", "tool_result", "error", "note"
+    "inbound", "outbound", "tool_call", "tool_result", "error", "note", "world_event"
 ]
 
 

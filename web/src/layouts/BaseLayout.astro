@@ -1,0 +1,146 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+  canonicalUrl?: string;
+  ogImage?: string;
+}
+
+const {
+  title,
+  description = "Real cakes, made by hand in our Sugar Land, TX kitchen. Cake \"Honey\", cake \"Napoleon\", cake \"Milk Maiden\" and more. Order on the site or WhatsApp.",
+  canonicalUrl = Astro.url.href,
+  ogImage = "/brand/logo/happy-cake-logo-1024.png",
+} = Astro.props;
+
+const fullTitle = title === "HappyCake" ? title : `${title} — HappyCake`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalUrl} />
+
+    <!-- Google Fonts: Cormorant Garamond (display) + Inter (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/brand/logo/happy-cake-logo-1024.png" />
+
+    <title>{fullTitle}</title>
+  </head>
+  <body class="min-h-screen flex flex-col bg-cream-50 text-text-primary">
+    <!-- Site header -->
+    <header class="bg-happy-blue-900 text-text-on-blue">
+      <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-3 no-underline hover:opacity-90 transition-opacity">
+          <img
+            src="/brand/logo/happy-cake-logo-1024.png"
+            alt="HappyCake wordmark"
+            width="36"
+            height="36"
+            class="rounded-sm"
+          />
+          <span class="font-display text-xl text-text-on-blue font-semibold tracking-wide">
+            HappyCake
+          </span>
+        </a>
+        <nav aria-label="Main navigation">
+          <ul class="flex gap-6 list-none m-0 p-0 text-sm font-body font-medium">
+            <li><a href="/order" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">Order</a></li>
+            <li><a href="/policies" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">Policies</a></li>
+            <li><a href="/about" class="text-happy-blue-200 hover:text-cream-50 transition-colors no-underline">About</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Page content -->
+    <main class="flex-1">
+      <slot />
+    </main>
+
+    <!-- Site footer -->
+    <footer class="bg-happy-blue-900 text-text-on-blue mt-16">
+      <div class="max-w-5xl mx-auto px-4 py-10">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+          <!-- Brand column -->
+          <div>
+            <p class="font-display text-xl font-semibold mb-2">HappyCake</p>
+            <p class="text-happy-blue-200 text-sm">
+              The original taste of happiness.<br />
+              Sugar Land, TX
+            </p>
+          </div>
+
+          <!-- Links column -->
+          <div>
+            <p class="font-body font-medium text-sm uppercase tracking-wider text-happy-blue-200 mb-3">Pages</p>
+            <ul class="space-y-2 text-sm list-none p-0 m-0">
+              <li><a href="/" class="text-happy-blue-200 hover:text-cream-50 no-underline">Home</a></li>
+              <li><a href="/about" class="text-happy-blue-200 hover:text-cream-50 no-underline">About</a></li>
+              <li><a href="/policies" class="text-happy-blue-200 hover:text-cream-50 no-underline">Policies</a></li>
+              <li><a href="/order" class="text-happy-blue-200 hover:text-cream-50 no-underline">Order</a></li>
+              <li><a href="/custom" class="text-happy-blue-200 hover:text-cream-50 no-underline">Custom cake</a></li>
+              <li><a href="/guides/cake-for-x-guests" class="text-happy-blue-200 hover:text-cream-50 no-underline">Cake guide</a></li>
+            </ul>
+          </div>
+
+          <!-- Contact column -->
+          <div>
+            <p class="font-body font-medium text-sm uppercase tracking-wider text-happy-blue-200 mb-3">Contact</p>
+            <p class="text-sm text-happy-blue-200 mb-2">
+              <a
+                href="https://wa.me/12815550100"
+                class="text-happy-blue-200 hover:text-cream-50 no-underline"
+                rel="noopener noreferrer"
+                target="_blank"
+              >WhatsApp</a>
+            </p>
+            <p class="text-sm text-happy-blue-200">
+              <a
+                href="https://happycake.us"
+                class="text-happy-blue-200 hover:text-cream-50 no-underline"
+              >happycake.us</a>
+            </p>
+          </div>
+        </div>
+
+        <!-- Closing pattern — required on every page footer (brand.r8) -->
+        <div class="border-t border-happy-blue-700 pt-6">
+          <p class="text-sm text-happy-blue-200 closing-pattern">
+            Order on the site at happycake.us or send a message on WhatsApp.
+          </p>
+          <p class="text-xs text-happy-blue-700 mt-3">
+            &copy; {new Date().getFullYear()} HappyCake US. Sugar Land, TX.
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Chat widget — pass API base via data attribute -->
+    <div id="chat-widget-root"></div>
+    <script
+      src="/chat-widget.js"
+      data-api={import.meta.env.PUBLIC_API_BASE ?? "http://localhost:8000"}
+      defer
+    ></script>
+  </body>
+</html>

@@ -1,0 +1,90 @@
+---
+/**
+ * /policies — Covers w1.ac9, w2.ac3
+ * Sections from /api/policies, stable headings: pickup, delivery, lead times,
+ * refunds, allergens, halal.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { fetchPolicies } from "../lib/api";
+import type { PolicySection } from "../lib/api";
+
+const data = await fetchPolicies();
+
+// Fallback policy text when backend is unreachable
+const fallbackSections: PolicySection[] = [
+  {
+    id: "pickup",
+    title: "Pickup",
+    body: "Pickup is available at our Sugar Land location during business hours. We will confirm your pickup window when you place your order.",
+  },
+  {
+    id: "delivery",
+    title: "Delivery",
+    body: "We offer local delivery within Sugar Land and nearby areas. Delivery details and fees are confirmed at order time.",
+  },
+  {
+    id: "lead_times",
+    title: "Lead times",
+    body: "Most cakes require 24 hours advance notice. Same-day orders are subject to kitchen availability. Rush orders may not be possible during peak seasons.",
+  },
+  {
+    id: "refunds",
+    title: "Refunds",
+    body: "If there is an issue with your order, please contact us within 24 hours and we will make it right. Refunds or replacements are handled case by case.",
+  },
+  {
+    id: "allergens",
+    title: "Allergens",
+    body: "Our cakes contain wheat, eggs, dairy, and tree nuts. Our kitchen handles nuts, so we cannot guarantee a nut-free environment. Please ask us about specific ingredients for any cake.",
+  },
+  {
+    id: "halal",
+    title: "Halal",
+    body: "Selected cakes are prepared following halal guidelines. Look for the halal-friendly label on individual product pages, or ask us directly.",
+  },
+];
+
+const sections: PolicySection[] = data?.sections ?? fallbackSections;
+const version = data?.version;
+---
+
+<BaseLayout
+  title="Policies"
+  description="HappyCake pickup, delivery, lead times, refunds, allergens, and halal policies. Sugar Land, TX."
+>
+  <!-- Page header -->
+  <section class="bg-happy-blue-900 text-text-on-blue py-12">
+    <div class="max-w-5xl mx-auto px-4">
+      <p class="text-happy-blue-200 cake-name-label mb-2">◆ HappyCake · Sugar Land</p>
+      <h1 class="font-display text-4xl font-semibold text-cream-50">Our policies</h1>
+      <p class="text-happy-blue-200 text-sm mt-2">Pickup, delivery, refunds, allergens, and halal.</p>
+    </div>
+  </section>
+
+  <!-- Policy sections — stable headings for agent parsing (w2.ac3) -->
+  <section class="max-w-5xl mx-auto px-4 py-12">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      {sections.map((section) => (
+        <div id={section.id} class="card-border bg-cream-100 p-6">
+          <h2 class="font-display text-xl font-semibold text-happy-blue-900 mb-3">
+            {section.title}
+          </h2>
+          <p class="text-sm text-text-primary leading-relaxed">{section.body}</p>
+        </div>
+      ))}
+    </div>
+
+    {version && (
+      <p class="text-xs text-text-primary opacity-40 mt-8">Policy version {version}</p>
+    )}
+  </section>
+
+  <!-- Closing pattern (brand.r8) -->
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-8">
+    <div class="max-w-5xl mx-auto px-4">
+      <p class="text-sm text-text-primary">
+        Questions about our policies? Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

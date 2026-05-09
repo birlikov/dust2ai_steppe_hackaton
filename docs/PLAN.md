@@ -152,16 +152,15 @@ Manual gates before each phase exit: live system runs the relevant flow without 
 ## Status
 
 - **Today is May 9, 2026 (kickoff day).** Brief unsealed; team token in hand.
-- **Last completed**: **Phase 1 — Pivot + recon.**
-  - Anthropic SDK stack removed (`src/agents/loop.py`, `models.py`, `tests/.../test_agent_loop.py`, `test_dry_run.py`, `src/mcp/anthropic_tools.py`, `anthropic` + `respx` deps).
-  - Runtime persona built under `agent/` (SOUL, RULES, TOOLS, EXAMPLES, README) — TOOLS sourced from `docs/mcp_inventory.md`.
-  - `src/agents/system_prompt.py` composes the persona; `src/agents/claude_bridge.py` shells out to `claude -p --system-prompt …` with `ANTHROPIC_MODEL=claude-opus-4-7` and a formatted history block. Tests mock the subprocess via an injected runner.
-  - `src/bot/handlers.py` + `src/bot/app.py` rewired to inject `bridge: ClaudeBridge` instead of `agent: AgentLoop`.
-  - `CLAUDE.md` rewritten as audience-neutral project description; dev rules in a "Working in this repo" appendix.
-  - `config/.env.example` cleaned (no `ANTHROPIC_API_KEY`; pinned `ANTHROPIC_MODEL=claude-opus-4-7`).
-  - `docs/specs.md` (60 ACs, 24 edge cases, 12 cross-cutting brand rules) and `docs/mcp_inventory.md` (55 tools across 8 families: square, kitchen, marketing, world, evaluator, whatsapp, instagram, gb) landed via brief-analyst + mcp-recon subagents.
-  - Quality gate: ruff clean, mypy strict clean, 45 pytests green.
-- **Next**: Phase 2 — Build (website + bot drafts + workflows + voice linter + retry helper). World engine becomes the integration backbone.
-- **Background processes**: nothing running. Bot will be relaunched at the start of Phase 2 with the bridge wired in. TG token rotated by user; verified before launch.
+- **Last completed**: **Phase 2 — Build (runtime layer + storefront + owner controls).**
+  - Web/backend API contract locked at `docs/CONTRACTS.md`.
+  - **Backend**: `src/core/retry.py` (exponential backoff + jitter), `src/core/voice.py` (brand-voice linter covering brand.r1..r10), `src/mcp/http_client.py` (HTTPS+JSON-RPC client for the happycake server with envelope unwrap + retry wrapper), `src/storage/drafts.py` + migration `002_drafts.sql` (drafts queue, owner identity, leads table), `src/workflows/orchestrator.py` (channel-agnostic per-turn orchestrator wrapping the bridge with audit + voice-lint).
+  - **World engine**: `src/world/poller.py` (event polling loop) with channel-specific dispatchers for `whatsapp`, `instagram_dm`, `instagram_comment`. Events drive the orchestrator and reply via `whatsapp_send` / `instagram_send_dm` / `instagram_reply_to_comment`.
+  - **Storefront API** (in `src/webhooks/app.py` + `src/webhooks/storefront.py`): `GET /api/catalog` (square_list_catalog + kitchen_get_capacity → contract shape), `GET /api/policies` (brandbook-derived static), `POST /api/chat` (orchestrator + bridge), `POST /api/lead` (persists + best-effort `marketing_report_to_owner`). CORS for the Astro origin. Returns 503 / 502 on contract errors.
+  - **Owner Telegram bot**: `/dashboard` (POS + kitchen + evaluator summaries), `/budget` (marketing budget + recent leads), `/drafts` (lists pending with Approve / Edit / Reject inline keyboard; Approve triggers `instagram_approve_post` + `instagram_publish_post` for IG drafts). `/start` captures the owner's chat id idempotently. `BOT_COMMANDS` extended; menu re-synced.
+  - **Website (`web/`)**: Astro + Tailwind, 8 pages (`/`, `/cake/[slug]`, `/about`, `/policies`, `/order`, `/custom`, `/guides/cake-for-x-guests`, `/sitemap.xml`), `/catalog.json`, `/robots.txt`, JSON-LD Product+Offer on every product page, vanilla-JS chat widget posting to `/api/chat`. Brandbook palette + Cormorant Garamond + Inter. `npm run build` exits 0; `tsc --noEmit` clean. Asset pack copied from `assets/brand/` to `web/public/brand/` at build time. Fallback catalog so the build succeeds even when the backend is offline.
+  - **Tests**: 7 new test modules (retry, voice, drafts, orchestrator, storefront, world_poller, webhook_routes) — 58 new test cases. Quality gate: ruff clean, mypy --strict clean, **103 pytests green**.
+- **Next**: Phase 3 — Integration (drive `world_start_scenario` end-to-end through every channel; self-grade via `evaluator_score_world_scenario`; fix breakages). Then Phase 4 — Critic + polish. Then Phase 5 — Submission.
+- **Background processes**: nothing running. To start Phase 3: `uv run python -m src.bot.app` (bot polling, requires `claude` on PATH), `uv run uvicorn src.webhooks.app:app --reload --port 8000` (storefront API), `cd web && npm run dev` (Astro dev server on :4321), `./scripts/start_tunnel.sh` (ngrok for inbound webhooks).
 
 This file gets updated by every Phase exit and at every commit boundary.

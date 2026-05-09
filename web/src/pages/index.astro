@@ -1,0 +1,202 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { fetchCatalog } from "../lib/api";
+import type { Product, KitchenState } from "../lib/api";
+
+// Fetch catalog at build time — falls back gracefully if backend is offline (w1.ec1)
+const catalogData = await fetchCatalog();
+const products: Product[] = catalogData?.products ?? [];
+const kitchen: KitchenState | null = catalogData?.kitchen ?? null;
+
+// Top 3 featured cakes for the homepage
+const featured = products.slice(0, 3);
+const catalogUnavailable = catalogData === null;
+---
+
+<BaseLayout
+  title="HappyCake — The original taste of happiness"
+  description="Real cakes, made by hand in our Sugar Land kitchen. Order online or on WhatsApp."
+>
+  <!-- Hero section -->
+  <section class="relative overflow-hidden bg-happy-blue-900 text-text-on-blue">
+    <div class="relative max-w-5xl mx-auto px-4 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
+      <div>
+        <!-- Eyebrow / diamond separator -->
+        <p class="text-happy-blue-200 text-sm font-body font-medium tracking-widest uppercase mb-4">
+          ◆ HappyCake · Sugar Land, TX
+        </p>
+        <h1 class="font-display text-5xl md:text-6xl font-semibold leading-tight mb-6 text-cream-50">
+          The original taste<br />of happiness.
+        </h1>
+        <p class="text-happy-blue-200 text-base leading-relaxed mb-8 max-w-sm">
+          It started with a phrase: &ldquo;It&rsquo;s just like homemade.&rdquo; Every cake is hand-decorated and hand-packed, using recipes perfected over years.
+        </p>
+        <div class="flex flex-wrap gap-4">
+          <a href="/order" class="btn-primary">Order a cake</a>
+          <a href="#featured" class="btn-secondary border-happy-blue-200 text-happy-blue-200 hover:bg-happy-blue-700">
+            See the menu
+          </a>
+        </div>
+      </div>
+      <div class="hidden md:block">
+        <img
+          src="/brand/hero/happy-cake-hero-01.webp"
+          alt="HappyCake — freshly decorated cake from our Sugar Land kitchen"
+          width="480"
+          height="400"
+          class="w-full object-cover"
+          loading="eager"
+        />
+      </div>
+    </div>
+    <!-- Awning pattern strip at bottom of hero -->
+    <div class="awning-pattern h-5 w-full opacity-60"></div>
+  </section>
+
+  <!-- Today's bake notice -->
+  {kitchen && !kitchen.overCapacity && (
+    <section class="bg-cream-100 border-b border-[rgba(14,42,60,0.12)]">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+        <span class="text-happy-blue-700 font-body font-medium text-sm">Today&rsquo;s bake is out.</span>
+        <span class="text-text-primary text-sm">
+          {kitchen.remainingCapacityMinutes} min of kitchen capacity remaining — order now to secure yours.
+        </span>
+        <a href="/order" class="ml-auto text-sm font-medium text-happy-blue-500 hover:text-happy-blue-700 whitespace-nowrap">
+          Order &rarr;
+        </a>
+      </div>
+    </section>
+  )}
+  {kitchen?.overCapacity && (
+    <section class="bg-cream-200 border-b border-[rgba(14,42,60,0.12)]">
+      <div class="max-w-5xl mx-auto px-4 py-3">
+        <span class="text-text-primary font-body text-sm">
+          The kitchen is at capacity today. <a href="/order" class="font-medium">Order for tomorrow</a> — we&rsquo;ll confirm within the hour.
+        </span>
+      </div>
+    </section>
+  )}
+
+  <!-- Featured cakes section -->
+  <section id="featured" class="max-w-5xl mx-auto px-4 py-16">
+    <h2 class="font-display text-3xl font-semibold mb-2 text-happy-blue-900">Our cakes</h2>
+    <p class="text-text-primary text-sm mb-10 max-w-xl">
+      Traditional, time-tested recipes. The kind handed down through families.
+    </p>
+
+    {/* w1.ec1: graceful fallback when backend is offline */}
+    {catalogUnavailable && (
+      <div class="card-border bg-cream-100 p-8 text-center">
+        <p class="font-display text-2xl text-happy-blue-700 mb-2">We&rsquo;re updating the menu.</p>
+        <p class="text-sm text-text-primary">
+          The catalog is refreshing right now. Please check back in a moment, or
+          <a href="https://wa.me/12815550100" target="_blank" rel="noopener">send us a WhatsApp message</a>
+          and we&rsquo;ll tell you what&rsquo;s on the counter today.
+        </p>
+      </div>
+    )}
+
+    {!catalogUnavailable && featured.length === 0 && (
+      <p class="text-sm text-text-primary">No cakes in the catalog right now. Check back soon.</p>
+    )}
+
+    {!catalogUnavailable && featured.length > 0 && (
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {featured.map((product) => (
+          <a
+            href={`/cake/${product.slug}`}
+            class="block card-border bg-cream-100 hover:bg-cream-50 transition-colors no-underline group"
+          >
+            <img
+              src={product.image.replace("/assets/brand", "/brand")}
+              alt={product.name}
+              width="400"
+              height="300"
+              class="w-full h-48 object-cover"
+              loading="lazy"
+            />
+            <div class="p-5">
+              {/* w1.ec3: cake names rendered as cake "X" — from API, echoed as-is */}
+              <p class="cake-name-label text-happy-blue-700 mb-1">{product.category}</p>
+              <h3 class="font-display text-xl font-semibold text-happy-blue-900 mb-2 group-hover:text-happy-blue-700 transition-colors">
+                {product.name}
+              </h3>
+              <p class="text-sm text-text-primary mb-3 leading-relaxed">{product.description}</p>
+              {/* w1.ac10: specific quantities in the form 1.2 kg, $42 */}
+              <p class="font-body font-medium text-sm text-happy-blue-900">
+                {product.weightLabel ? `${product.weightLabel}, ` : ""}{product.priceFormatted}
+              </p>
+            </div>
+          </a>
+        ))}
+      </div>
+    )}
+
+    {!catalogUnavailable && products.length > 3 && (
+      <div class="mt-8 text-center">
+        <a href="/order" class="btn-secondary">See all cakes &rarr;</a>
+      </div>
+    )}
+  </section>
+
+  <!-- Brand story strip -->
+  <section class="bg-happy-blue-900 text-text-on-blue py-16">
+    <div class="max-w-5xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
+      <div>
+        <p class="text-happy-blue-200 text-sm font-medium uppercase tracking-widest mb-4">◆ Our story</p>
+        <h2 class="font-display text-3xl font-semibold text-cream-50 mb-4 leading-snug">
+          &ldquo;It&rsquo;s just like homemade.&rdquo;
+        </h2>
+        <p class="text-happy-blue-200 text-base leading-relaxed mb-4">
+          We started baking cakes. As if for ourselves. People kept coming back saying it tasted like real home baking. And we realised that homemade taste was the centre of what we wanted to make.
+        </p>
+        <p class="text-happy-blue-200 text-base leading-relaxed mb-6">
+          Every ingredient is carefully selected. Every cake is hand-decorated and hand-packed. Every recipe was perfected over years until it earned its name.
+        </p>
+        <a href="/about" class="btn-secondary border-happy-blue-200 text-happy-blue-200 hover:bg-happy-blue-700">
+          Read our story
+        </a>
+      </div>
+      <div class="hidden md:block">
+        <img
+          src="/brand/hero/happy-cake-hero-02.webp"
+          alt="Behind the counter at HappyCake Sugar Land"
+          width="480"
+          height="360"
+          class="w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    </div>
+  </section>
+
+  <!-- Content callouts: link to /about and /custom -->
+  <section class="max-w-5xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-8">
+    <div class="card-border bg-cream-100 p-8">
+      <p class="text-happy-blue-200 cake-name-label text-happy-blue-500 mb-2">Custom cakes</p>
+      <h2 class="font-display text-2xl font-semibold text-happy-blue-900 mb-3">Have something specific in mind?</h2>
+      <p class="text-sm text-text-primary leading-relaxed mb-6">
+        Decoration is a small, optional service on top of our ready-made line. Tell us what you need and Saule and the team will reply within the hour.
+      </p>
+      <a href="/custom" class="btn-primary">Enquire about a custom cake</a>
+    </div>
+
+    <div class="card-border bg-cream-100 p-8">
+      <p class="cake-name-label text-happy-blue-500 mb-2">Guides</p>
+      <h2 class="font-display text-2xl font-semibold text-happy-blue-900 mb-3">Choosing a cake for your event</h2>
+      <p class="text-sm text-text-primary leading-relaxed mb-6">
+        Not sure how much cake to order, or which one suits the occasion? Our short guide covers guest count, dietary needs, and lead times.
+      </p>
+      <a href="/guides/cake-for-x-guests" class="btn-secondary">Read the guide</a>
+    </div>
+  </section>
+
+  <!-- Closing pattern (brand.r8) -->
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-8">
+    <div class="max-w-5xl mx-auto px-4 text-center">
+      <p class="text-text-primary text-sm">
+        Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

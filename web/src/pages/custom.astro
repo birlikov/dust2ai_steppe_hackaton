@@ -1,0 +1,228 @@
+---
+/**
+ * /custom — Custom-cake intake form.
+ * Same /api/lead endpoint with intent: "custom".
+ * Copy must include brandbook positioning: "We are not custom cakes."
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="Custom cake enquiry"
+  description="Ask HappyCake Sugar Land about custom cake decoration. Saule and the team reply within the hour."
+>
+  <section class="bg-happy-blue-900 text-text-on-blue py-12">
+    <div class="max-w-5xl mx-auto px-4">
+      <p class="text-happy-blue-200 cake-name-label mb-2">◆ HappyCake · Sugar Land</p>
+      <h1 class="font-display text-4xl font-semibold text-cream-50">Custom cake enquiry</h1>
+    </div>
+  </section>
+
+  <section class="max-w-5xl mx-auto px-4 py-12 grid md:grid-cols-2 gap-12">
+    <!-- Context / positioning copy -->
+    <div>
+      <h2 class="font-display text-2xl font-semibold text-happy-blue-900 mb-4">
+        A word about custom cakes
+      </h2>
+      <p class="text-base text-text-primary leading-relaxed mb-4">
+        Our offering is the ready-made line — proven recipes, consistent quality, available right now. Decoration is a small, optional service we add on top.
+      </p>
+      <p class="text-base text-text-primary leading-relaxed mb-4">
+        We are not a custom-cake studio. Custom-decoration orders introduce variability we don&rsquo;t believe in, so we handle them selectively.
+      </p>
+      <p class="text-base text-text-primary leading-relaxed mb-4">
+        Tell us what you have in mind. Saule and the team will review your request and reply within the hour. If we can help, we will let you know clearly. If we can&rsquo;t, we&rsquo;ll say so and suggest the closest ready-made option.
+      </p>
+      <ul class="text-sm text-text-primary space-y-2 list-disc list-inside">
+        <li>Text or inscription on the cake — usually possible.</li>
+        <li>Simple colour accents — possible with advance notice.</li>
+        <li>Complex sculpted fondant figures — outside our scope.</li>
+        <li>Photo-printed toppers — we can advise on sourcing.</li>
+      </ul>
+    </div>
+
+    <!-- Form -->
+    <div>
+      <!-- Success state -->
+      <div id="custom-success" class="hidden bg-cream-100 card-border p-8 mb-6">
+        <h2 class="font-display text-xl font-semibold text-happy-blue-900 mb-3">
+          Your enquiry is received.
+        </h2>
+        <p class="text-sm text-text-primary mb-4">
+          Saule and the HappyCake team will be in touch within the hour.
+        </p>
+        <p class="text-sm text-text-primary closing-pattern">
+          Order on the site at happycake.us or send a message on WhatsApp.
+        </p>
+      </div>
+
+      <form id="custom-form" class="space-y-5" novalidate>
+        <div>
+          <label for="name" class="block text-sm font-medium text-text-primary mb-1">
+            Your name <span class="text-accent-coral">*</span>
+          </label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            required
+            autocomplete="given-name"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm focus:outline-none focus:border-happy-blue-500"
+            placeholder="Maria"
+          />
+          <p id="name-error" class="text-xs text-accent-coral mt-1 hidden"></p>
+        </div>
+
+        <div>
+          <label for="contact" class="block text-sm font-medium text-text-primary mb-1">
+            Phone or WhatsApp <span class="text-accent-coral">*</span>
+          </label>
+          <input
+            type="tel"
+            id="contact"
+            name="contact"
+            required
+            autocomplete="tel"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm focus:outline-none focus:border-happy-blue-500"
+            placeholder="+1 281 555 0100"
+          />
+          <p id="contact-error" class="text-xs text-accent-coral mt-1 hidden"></p>
+        </div>
+
+        <div>
+          <label for="intent" class="block text-sm font-medium text-text-primary mb-1">
+            Describe your request <span class="text-accent-coral">*</span>
+          </label>
+          <textarea
+            id="intent"
+            name="intent"
+            rows="4"
+            required
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm focus:outline-none focus:border-happy-blue-500 resize-none"
+            placeholder="Which cake, what decoration, when you need it, guest count…"
+          ></textarea>
+          <p id="intent-error" class="text-xs text-accent-coral mt-1 hidden"></p>
+        </div>
+
+        <div>
+          <label for="pickup_date" class="block text-sm font-medium text-text-primary mb-1">
+            Date needed
+          </label>
+          <input
+            type="date"
+            id="pickup_date"
+            name="pickup_date"
+            class="w-full border border-[rgba(14,42,60,0.25)] bg-cream-50 px-4 py-2.5 text-sm focus:outline-none focus:border-happy-blue-500"
+          />
+        </div>
+
+        <!-- Hidden fields -->
+        <input type="hidden" name="custom_flag" value="true" />
+        <input type="hidden" id="utm_source" name="utm_source" value="" />
+        <input type="hidden" id="utm_campaign" name="utm_campaign" value="" />
+
+        <p id="form-error" class="text-xs text-accent-coral hidden"></p>
+
+        <button type="submit" id="submit-btn" class="btn-primary w-full text-center">
+          Send enquiry
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Closing pattern (brand.r8) -->
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-8">
+    <div class="max-w-5xl mx-auto px-4">
+      <p class="text-sm text-text-primary closing-pattern">
+        Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+</BaseLayout>
+
+<script>
+  const API_BASE = import.meta.env.PUBLIC_API_BASE ?? "http://localhost:8000";
+
+  function el<T extends HTMLElement>(id: string): T {
+    return document.getElementById(id) as T;
+  }
+
+  function showError(fieldId: string, message: string) {
+    const errEl = el(`${fieldId}-error`);
+    if (errEl) { errEl.textContent = message; errEl.classList.remove("hidden"); }
+  }
+
+  function clearErrors() {
+    ["name-error", "contact-error", "intent-error", "form-error"].forEach((id) => {
+      const e = el(id);
+      if (e) e.classList.add("hidden");
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    // Capture UTM from URL
+    const params = new URLSearchParams(window.location.search);
+    (el("utm_source") as HTMLInputElement).value = params.get("utm_source") ?? "";
+    (el("utm_campaign") as HTMLInputElement).value = params.get("utm_campaign") ?? "";
+
+    const form = el("custom-form") as HTMLFormElement;
+    const submitBtn = el("submit-btn") as HTMLButtonElement;
+    const successEl = el("custom-success") as HTMLDivElement;
+    const formErrorEl = el("form-error") as HTMLParagraphElement;
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearErrors();
+
+      const data = new FormData(form);
+      const payload = {
+        name: (data.get("name") as string)?.trim(),
+        contact: (data.get("contact") as string)?.trim(),
+        intent: `[Custom] ${(data.get("intent") as string)?.trim()}`,
+        channel_preference: "website",
+        utm_source: data.get("utm_source") as string || undefined,
+        utm_campaign: data.get("utm_campaign") as string || undefined,
+        pickup_date: data.get("pickup_date") as string || undefined,
+        page: "/custom",
+      };
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending…";
+
+      try {
+        const res = await fetch(`${API_BASE}/api/lead`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          form.classList.add("hidden");
+          successEl.classList.remove("hidden");
+          return;
+        }
+
+        if (res.status === 400) {
+          const body = await res.json();
+          const errors: Record<string, string> = body.detail ?? {};
+          for (const [field, msg] of Object.entries(errors)) {
+            showError(field, msg as string);
+          }
+          if (!Object.keys(errors).length) {
+            formErrorEl.textContent = "Please check your details and try again.";
+            formErrorEl.classList.remove("hidden");
+          }
+        } else {
+          formErrorEl.textContent = "Something went wrong. Please try again or message us on WhatsApp.";
+          formErrorEl.classList.remove("hidden");
+        }
+      } catch {
+        formErrorEl.textContent = "Could not reach the server. Please message us on WhatsApp.";
+        formErrorEl.classList.remove("hidden");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Send enquiry";
+      }
+    });
+  });
+</script>

@@ -10,11 +10,13 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, BotCommandScopeDefault
 
 from src.agents.claude_bridge import ClaudeBridge, build_default_bridge
-from src.bot.handlers import router
+from src.bot.handlers import router as commands_router
 from src.bot.middleware import AuditMiddleware
+from src.bot.owner_commands import router as owner_router
 from src.bot.storage import SqliteFsmStorage
 from src.core.config import get_settings
 from src.core.logging import get_logger
+from src.mcp.http_client import HappycakeMcpClient, build_default_client
 from src.storage import db
 
 log = get_logger(__name__)
@@ -22,6 +24,9 @@ log = get_logger(__name__)
 BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="start", description="Begin a session"),
     BotCommand(command="help", description="Show available commands"),
+    BotCommand(command="dashboard", description="Sales / kitchen / evaluator snapshot"),
+    BotCommand(command="budget", description="Marketing budget + recent leads"),
+    BotCommand(command="drafts", description="Review pending drafts"),
     BotCommand(command="cancel", description="Cancel the current operation"),
     BotCommand(command="restart", description="Wipe state and start over"),
 ]
@@ -45,24 +50,49 @@ def build_bot() -> Bot:
 def build_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=SqliteFsmStorage())
     dp.message.middleware(AuditMiddleware())
-    dp.include_router(router)
+    # Owner commands first so /dashboard etc. don't fall through to free-text.
+    dp.include_router(owner_router)
+    dp.include_router(commands_router)
     return dp
 
 
-async def run_polling(bridge: ClaudeBridge | None = None) -> None:
+async def run_polling(
+    bridge: ClaudeBridge | None = None,
+    mcp: HappycakeMcpClient | None = None,
+) -> None:
     bot = build_bot()
     dp = build_dispatcher()
     await sync_commands(bot)
     log.info("telegram.start_polling")
     bridge = bridge or build_default_bridge()
     log.info("agent.ready", model=bridge.model, command=bridge.command)
+
+    owns_mcp = False
+    if mcp is None:
+        try:
+            mcp = await build_default_client().__aenter__()
+            owns_mcp = True
+        except Exception as exc:  # pragma: no cover - boot diagnostic
+            log.warning("mcp.boot_skipped", err=str(exc))
+            mcp = None
+
     try:
-        await dp.start_polling(
-            bot,
-            bridge=bridge,
-            allowed_updates=dp.resolve_used_update_types(),
-        )
+        if mcp is not None:
+            await dp.start_polling(
+                bot,
+                allowed_updates=dp.resolve_used_update_types(),
+                bridge=bridge,
+                mcp=mcp,
+            )
+        else:
+            await dp.start_polling(
+                bot,
+                allowed_updates=dp.resolve_used_update_types(),
+                bridge=bridge,
+            )
     finally:
+        if owns_mcp and mcp is not None:
+            await mcp.__aexit__(None, None, None)
         await bot.session.close()
         await db.close()
 

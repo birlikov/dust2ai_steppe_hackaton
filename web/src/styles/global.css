@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply font-body text-text-primary bg-cream-50;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  h1 {
+    @apply font-display text-display-1 leading-tight;
+  }
+
+  h2 {
+    @apply font-display text-display-2;
+  }
+
+  h3 {
+    @apply font-display text-display-3;
+  }
+
+  p {
+    @apply text-base;
+  }
+
+  a {
+    @apply text-happy-blue-500 hover:text-happy-blue-700 transition-colors;
+  }
+
+  /* Borders at 20% opacity over cream surfaces */
+  .card-border {
+    border: 0.5px solid rgba(14, 42, 60, 0.20);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-block bg-happy-blue-700 text-text-on-blue font-body font-medium
+           px-6 py-3 text-sm tracking-wide
+           hover:bg-happy-blue-900 transition-colors;
+  }
+
+  .btn-secondary {
+    @apply inline-block border border-happy-blue-700 text-happy-blue-700 font-body font-medium
+           px-6 py-3 text-sm tracking-wide
+           hover:bg-happy-blue-200 transition-colors;
+  }
+
+  .closing-pattern {
+    @apply text-sm text-text-primary;
+  }
+
+  /* Polka-dot awning pattern for decorative headers */
+  .awning-pattern {
+    background-color: #0E2A3C;
+    background-image: radial-gradient(#E9DBB4 1.5px, transparent 1.5px);
+    background-size: 18px 18px;
+  }
+
+  /* Cake-name label per brandbook §4 — Inter 500, small caps, letter-spacing 0.1em */
+  .cake-name-label {
+    @apply font-body font-medium text-sm uppercase tracking-widest;
+    font-variant: small-caps;
+    letter-spacing: 0.1em;
+  }
+}

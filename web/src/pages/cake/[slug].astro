@@ -1,0 +1,199 @@
+---
+/**
+ * /cake/[slug] — Per-product page.
+ *
+ * Covers:
+ *   w1.ac2  — price from catalog, not hardcoded
+ *   w1.ac10 — weight + price in "1.2 kg, $42" form
+ *   w1.ac11 — only approved asset-pack images
+ *   w1.ec3  — cake names rendered as cake "X"
+ *   w2.ac1  — JSON-LD Product + Offer
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { fetchCatalog } from "../../lib/api";
+import type { Product } from "../../lib/api";
+
+export async function getStaticPaths() {
+  // Fallback catalog used when the backend is offline at build time. Mirrors
+  // the seeded MCP catalog so the static site always has at least one product
+  // page. At runtime the chat widget + /api/catalog read from the live MCP.
+  const FALLBACK_PRODUCTS: Product[] = [
+    {
+      id: "sq_item_honey_cake_slice",
+      variationId: "sq_var_honey_cake_slice",
+      kitchenProductId: "honey-cake-slice",
+      slug: "honey-cake-slice",
+      name: 'cake "Honey" — slice',
+      category: "slices",
+      priceUsd: 8.5,
+      priceFormatted: "$8.50",
+      weightLabel: null,
+      leadTimeMinutes: 5,
+      halal: null,
+      description:
+        "Individual honey cake slice for walk-ins and quick pickup.",
+      image: "/brand/products/happy-cake-product-01.webp",
+    },
+    {
+      id: "sq_item_pistachio_roll",
+      variationId: "sq_var_pistachio_roll",
+      kitchenProductId: "pistachio-roll",
+      slug: "pistachio-roll",
+      name: 'cake "Pistachio Roll"',
+      category: "classics",
+      priceUsd: 44.0,
+      priceFormatted: "$44.00",
+      weightLabel: "1.0 kg",
+      leadTimeMinutes: 1440,
+      halal: null,
+      description:
+        "Light meringue, butter cream, the sour-sweet of fresh raspberry.",
+      image: "/brand/products/happy-cake-product-03.webp",
+    },
+  ];
+  const catalog = await fetchCatalog();
+  const products = catalog?.products?.length
+    ? catalog.products
+    : FALLBACK_PRODUCTS;
+  const overCapacity = catalog?.kitchen?.overCapacity ?? false;
+  return products.map((product) => ({
+    params: { slug: product.slug },
+    props: { product, overCapacity },
+  }));
+}
+
+interface Props {
+  product: Product;
+  overCapacity: boolean;
+}
+
+const { product, overCapacity } = Astro.props;
+
+// Build JSON-LD for this product (w2.ac1)
+const availability =
+  overCapacity ? "https://schema.org/PreOrder" : "https://schema.org/InStock";
+
+const jsonLd = {
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  name: product.name,
+  description: product.description,
+  image: `https://happycake.us${product.image.replace("/assets/brand", "/brand")}`,
+  brand: {
+    "@type": "Brand",
+    name: "HappyCake",
+  },
+  offers: {
+    "@type": "Offer",
+    url: `https://happycake.us/cake/${product.slug}`,
+    priceCurrency: "USD",
+    price: product.priceUsd.toFixed(2),
+    availability,
+  },
+};
+
+// Order CTA pre-fills the slug
+const orderHref = `/order?slug=${product.slug}&qty=1`;
+---
+
+<BaseLayout
+  title={product.name}
+  description={`${product.name}. ${product.description} ${product.weightLabel ? product.weightLabel + "," : ""} ${product.priceFormatted}. Order on the site or WhatsApp.`}
+>
+  <!-- JSON-LD structured data (w2.ac1) -->
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+
+  <!-- Breadcrumb -->
+  <nav class="max-w-5xl mx-auto px-4 pt-6 pb-2 text-sm" aria-label="Breadcrumb">
+    <ol class="flex items-center gap-2 list-none m-0 p-0">
+      <li><a href="/" class="text-happy-blue-500">Home</a></li>
+      <li class="text-text-primary opacity-40">/</li>
+      <li class="text-text-primary">{product.name}</li>
+    </ol>
+  </nav>
+
+  <!-- Product hero -->
+  <section class="max-w-5xl mx-auto px-4 py-10 grid md:grid-cols-2 gap-12 items-start">
+    <div>
+      <img
+        src={product.image.replace("/assets/brand", "/brand")}
+        alt={product.name}
+        width="600"
+        height="480"
+        class="w-full object-cover card-border"
+        loading="eager"
+      />
+    </div>
+
+    <div>
+      <p class="cake-name-label text-happy-blue-500 mb-2">{product.category}</p>
+      <!-- w1.ec3: name from API already follows cake "X" pattern -->
+      <h1 class="font-display text-4xl md:text-5xl font-semibold text-happy-blue-900 mb-4 leading-tight">
+        {product.name}
+      </h1>
+      <p class="text-base text-text-primary leading-relaxed mb-4">{product.description}</p>
+
+      <!-- w1.ac10: weight + price in brandbook-compliant form -->
+      <p class="font-body font-semibold text-xl text-happy-blue-900 mb-1">
+        {product.weightLabel ? `${product.weightLabel}, ` : ""}{product.priceFormatted}
+      </p>
+
+      {product.halal === true && (
+        <p class="inline-block bg-accent-green text-text-on-blue text-xs font-medium px-3 py-1 mb-4">
+          Halal-friendly
+        </p>
+      )}
+
+      {product.leadTimeMinutes !== null && product.leadTimeMinutes > 0 && (
+        <p class="text-sm text-text-primary mb-4">
+          Lead time: approx. {product.leadTimeMinutes} min.
+        </p>
+      )}
+
+      <!-- Availability notice (w1.ec2) -->
+      {overCapacity ? (
+        <div class="bg-cream-200 card-border p-4 mb-6">
+          <p class="text-sm text-text-primary font-medium">
+            Ordering is closed for today — the kitchen is at capacity.
+          </p>
+          <p class="text-sm text-text-primary mt-1">
+            Order now to receive yours tomorrow. We&rsquo;ll confirm within the hour.
+          </p>
+        </div>
+      ) : (
+        <div class="bg-cream-100 card-border p-4 mb-6">
+          <p class="text-sm text-text-primary font-medium">In stock — available for pickup or delivery.</p>
+        </div>
+      )}
+
+      <!-- Order CTA -->
+      <a href={orderHref} class="btn-primary w-full text-center block mb-4">
+        Order this cake
+      </a>
+      <a
+        href="https://wa.me/12815550100"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-secondary w-full text-center block"
+      >
+        Order on WhatsApp
+      </a>
+
+      <!-- Closing pattern (brand.r8) — required on every product page CTA -->
+      <p class="text-sm text-text-primary mt-4 closing-pattern">
+        Order on the site at happycake.us or send a message on WhatsApp.
+      </p>
+    </div>
+  </section>
+
+  <!-- Related products nudge -->
+  <section class="bg-cream-100 border-t border-[rgba(14,42,60,0.12)] py-12">
+    <div class="max-w-5xl mx-auto px-4">
+      <h2 class="font-display text-2xl font-semibold text-happy-blue-900 mb-2">Our classics</h2>
+      <p class="text-sm text-text-primary mb-6">
+        Cake &ldquo;Honey&rdquo;, cake &ldquo;Napoleon&rdquo;, cake &ldquo;Milk Maiden&rdquo;, cake &ldquo;Pistachio Roll&rdquo; — time-tested recipes that earn their names.
+      </p>
+      <a href="/order" class="btn-secondary">Browse all cakes</a>
+    </div>
+  </section>
+</BaseLayout>
