@@ -1,13 +1,17 @@
-"""Owner-facing Telegram commands: dashboard, budget, drafts queue.
+"""Owner-facing Telegram commands.
 
-These commands surface MCP-derived state to the business owner and let them
-approve / edit / reject queued drafts (Instagram posts, Google Business posts,
-paid-ads creatives). The handlers depend on the MCP HTTP client and the drafts
-repository — both injected from :mod:`src.bot.app` via aiogram's data dict.
+Each command pulls live state from the MCP server and asks the
+owner-bridge (`claude -p` with the `owner_agent/` persona) to summarise it
+in plain English. The owner sees brief prose, never raw JSON.
+
+Slash commands here are conversational shortcuts — the same prose can be
+elicited via free text ("anything urgent?", "sales today?") through
+:mod:`src.bot.handlers`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -15,6 +19,7 @@ from aiogram import Bot, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 
+from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.bot.keyboards import draft_keyboard, parse_draft_callback
 from src.core.logging import get_logger
 from src.mcp.http_client import (
@@ -29,7 +34,12 @@ from src.storage.audit import record
 log = get_logger(__name__)
 router = Router(name="owner_commands")
 
-DRAFT_PREVIEW_MAX = 800
+DRAFT_CAPTION_PREVIEW = 120  # chars rendered per draft preview line
+
+
+# ---------------------------------------------------------------------------
+# /dashboard
+# ---------------------------------------------------------------------------
 
 
 @router.message(Command("dashboard"))
@@ -37,24 +47,42 @@ async def cmd_dashboard(
     message: Message,
     bot: Bot,
     session_id: str,
+    owner_bridge: ClaudeBridge,
     mcp: HappycakeMcpClient,
 ) -> None:
-    ack = await message.answer("📊 Fetching dashboard…")
+    ack = await message.answer("📊 Looking at the day so far…")
     await bot.send_chat_action(message.chat.id, "typing")
-    parts: list[str] = ["📊 *HappyCake dashboard*"]
-    parts.append(await _summary_block("Sales (POS)", mcp, "square_get_pos_summary"))
-    parts.append(
-        await _summary_block(
-            "Kitchen", mcp, "kitchen_get_production_summary"
-        )
+    pos, kitchen, evidence, pending = await asyncio.gather(
+        _safe_call(mcp, "square_get_pos_summary"),
+        _safe_call(mcp, "kitchen_get_production_summary"),
+        _safe_call(mcp, "evaluator_get_evidence_summary"),
+        drafts.list_status("pending"),
+        return_exceptions=False,
     )
-    parts.append(
-        await _summary_block(
-            "Evaluator evidence", mcp, "evaluator_get_evidence_summary"
-        )
+    payload = {
+        "pos_summary": pos,
+        "kitchen": kitchen,
+        "evidence": evidence,
+        "pending_drafts": len(pending),
+    }
+    prose = await _summarise(
+        owner_bridge,
+        instruction=(
+            "Here's the current operational state. Give Askhat (the owner) a "
+            "four-bullet brief: today's sales (orders + revenue + channel "
+            "mix), kitchen utilisation, drafts pending his approval, and "
+            "anything urgent. Lead with the urgent item if any. English, "
+            "plain prose, no JSON, no code blocks."
+        ),
+        payload=payload,
     )
-    await ack.edit_text("\n\n".join(parts), parse_mode="Markdown")
+    await _safe_edit(ack, prose)
     await record("agent", "outbound", {"text": "dashboard"}, session_id=session_id)
+
+
+# ---------------------------------------------------------------------------
+# /budget
+# ---------------------------------------------------------------------------
 
 
 @router.message(Command("budget"))
@@ -62,27 +90,50 @@ async def cmd_budget(
     message: Message,
     bot: Bot,
     session_id: str,
+    owner_bridge: ClaudeBridge,
     mcp: HappycakeMcpClient,
 ) -> None:
-    ack = await message.answer("💰 Fetching budget…")
+    ack = await message.answer("💰 Reading the marketing state…")
     await bot.send_chat_action(message.chat.id, "typing")
-    blocks = ["💰 *Marketing budget*"]
-    blocks.append(await _summary_block("Budget envelope", mcp, "marketing_get_budget"))
-    blocks.append(
-        await _summary_block(
-            "Recent campaign metrics", mcp, "marketing_get_campaign_metrics"
-        )
+    budget, metrics, marketing_score, leads = await asyncio.gather(
+        _safe_call(mcp, "marketing_get_budget"),
+        _safe_call(mcp, "marketing_get_campaign_metrics"),
+        _safe_call(mcp, "evaluator_score_marketing_loop"),
+        drafts.list_recent_leads(limit=5),
+        return_exceptions=False,
     )
-    leads = list(await drafts.list_recent_leads(limit=5))
-    if leads:
-        recent = "\n".join(
-            f"  • {lead.created_at[:10]} {lead.name} — {lead.intent[:60]}"
-            f" (utm={lead.utm_source or 'direct'}/{lead.utm_campaign or '-'})"
+    payload = {
+        "budget_envelope": budget,
+        "campaign_metrics": metrics,
+        "marketing_score": marketing_score,
+        "recent_website_leads": [
+            {
+                "name": lead.name,
+                "intent": lead.intent[:120],
+                "utm_source": lead.utm_source,
+                "utm_campaign": lead.utm_campaign,
+                "created_at": lead.created_at,
+            }
             for lead in leads
-        )
-        blocks.append("*Recent website leads*\n" + recent)
-    await ack.edit_text("\n\n".join(blocks), parse_mode="Markdown")
+        ],
+    }
+    prose = await _summarise(
+        owner_bridge,
+        instruction=(
+            "Marketing snapshot. Give Askhat a brief: budget remaining vs "
+            "the $500 envelope, what's working in the campaigns, the most "
+            "recent website leads (mention by first name + utm_source), and "
+            "one recommended next move. English, four short bullets max."
+        ),
+        payload=payload,
+    )
+    await _safe_edit(ack, prose)
     await record("agent", "outbound", {"text": "budget"}, session_id=session_id)
+
+
+# ---------------------------------------------------------------------------
+# /drafts
+# ---------------------------------------------------------------------------
 
 
 @router.message(Command("drafts"))
@@ -90,17 +141,16 @@ async def cmd_drafts(message: Message, bot: Bot, session_id: str) -> None:
     await bot.send_chat_action(message.chat.id, "typing")
     pending = await drafts.list_status("pending")
     if not pending:
-        await message.answer("No drafts pending. ✨")
+        await message.answer("Nothing pending. Inbox is clear.")
         await record(
             "agent", "outbound", {"text": "drafts:none"}, session_id=session_id
         )
         return
     await message.answer(f"{len(pending)} draft(s) waiting on you:")
     for draft in pending:
-        preview = _format_draft(draft)
+        preview = _short_preview(draft)
         await message.answer(
             preview,
-            parse_mode="Markdown",
             reply_markup=draft_keyboard(draft.id),
         )
     await record(
@@ -109,6 +159,11 @@ async def cmd_drafts(message: Message, bot: Bot, session_id: str) -> None:
         {"text": "drafts:list", "count": len(pending)},
         session_id=session_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Inline-keyboard callbacks (Approve / Edit / Reject)
+# ---------------------------------------------------------------------------
 
 
 @router.callback_query(lambda c: (c.data or "").startswith("draft:"))
@@ -139,9 +194,9 @@ async def cb_draft(
     elif action == "reject":
         await drafts.reject(draft_id, "owner rejected via /drafts")
         await callback.answer("Rejected.")
-        await _safe_edit(
+        await _safe_callback_edit(
             callback,
-            f"❌ *Rejected*\n\n{_format_draft_body(draft)}",
+            f"❌ Rejected — {_short_preview(draft, with_header=False)}",
         )
         await record(
             "agent",
@@ -150,15 +205,13 @@ async def cb_draft(
             session_id=session_id,
         )
     elif action == "edit":
-        # Lightweight edit: mark the draft so the owner knows we received the
-        # tap; full edit-text capture is a v2 feature (would need an FSM).
         await drafts.edit(draft_id, "(owner requested edit — re-generate)")
         await callback.answer(
-            "Edit requested — the next pass will regenerate this draft."
+            "Edit requested — the next pass regenerates this draft."
         )
-        await _safe_edit(
+        await _safe_callback_edit(
             callback,
-            f"📝 *Edit requested*\n\n{_format_draft_body(draft)}",
+            f"📝 Edit requested — {_short_preview(draft, with_header=False)}",
         )
         await record(
             "agent",
@@ -194,60 +247,84 @@ async def _approve_draft(
                 {"scheduledPostId": draft.external_id},
             )
             await drafts.mark_published(draft_id)
-            publish_note = " — published to Instagram."
+            publish_note = "published to Instagram"
         except (McpTransportError, McpError) as exc:
-            publish_note = f" — publish failed: {exc}"
+            publish_note = f"publish failed: {exc}"
             log.error("draft.publish_failed", err=str(exc), draft_id=draft_id)
     await callback.answer("Approved.")
-    await _safe_edit(
+    note = f" — {publish_note}" if publish_note else ""
+    await _safe_callback_edit(
         callback,
-        f"✅ *Approved*{publish_note or ''}\n\n{_format_draft_body(draft)}",
+        f"✅ Approved{note} — {_short_preview(draft, with_header=False)}",
     )
 
 
-async def _safe_edit(callback: CallbackQuery, text: str) -> None:
-    """Edit the message body in place, tolerating Telegram's optional types."""
+async def _safe_callback_edit(callback: CallbackQuery, text: str) -> None:
+    """Edit the callback's source message in place; tolerate missing/old messages."""
     msg = callback.message
-    if msg is None or isinstance(msg, InaccessibleMessage):
+    if isinstance(msg, InaccessibleMessage) or msg is None:
         return
-    await msg.edit_text(text, parse_mode="Markdown")
-
-
-async def _summary_block(label: str, mcp: HappycakeMcpClient, tool: str) -> str:
     try:
-        data = await call_with_retry(mcp, tool, {})
+        await msg.edit_text(text)
+    except Exception as exc:
+        log.warning("callback.edit_failed", err=str(exc))
+
+
+async def _safe_edit(message: Message, text: str) -> None:
+    """Edit a regular message in place; tolerate Telegram quirks."""
+    try:
+        await message.edit_text(text)
+    except Exception as exc:
+        log.warning("message.edit_failed", err=str(exc))
+        await message.answer(text)
+
+
+async def _safe_call(mcp: HappycakeMcpClient, tool: str) -> Any:
+    """Call an MCP read tool and return its result, or a small error marker."""
+    try:
+        return await call_with_retry(mcp, tool, {})
     except (McpTransportError, McpError) as exc:
-        return f"*{label}*\n_unable to fetch ({exc})_"
-    return f"*{label}*\n```\n{_pretty(data)}\n```"
+        log.warning("mcp.read_failed", tool=tool, err=str(exc))
+        return {"error": str(exc), "tool": tool}
 
 
-def _pretty(value: Any) -> str:
-    """Compact JSON pretty-print, capped at 1500 chars to stay under TG 4096."""
+async def _summarise(
+    owner_bridge: ClaudeBridge,
+    *,
+    instruction: str,
+    payload: dict[str, Any],
+) -> str:
+    """Ask the owner-bridge to translate a payload into English prose."""
     try:
-        text = json.dumps(value, ensure_ascii=False, indent=2)
-    except (TypeError, ValueError):
-        text = str(value)
-    return text[:1500]
+        body = (
+            f"{instruction}\n\n"
+            "Here is the raw data (JSON; do NOT echo it back):\n"
+            f"{json.dumps(payload, default=str)[:6000]}"
+        )
+        reply = await owner_bridge.query(body)
+    except ClaudeBridgeError as exc:
+        log.error("owner_bridge.query_failed", err=str(exc))
+        return (
+            "Couldn't reach the assistant just now — try /dashboard again "
+            "in a moment."
+        )
+    return reply.strip() or "(no response)"
 
 
-def _format_draft(draft: drafts.Draft) -> str:
-    body = _format_draft_body(draft)
-    head = (
-        f"📝 *Draft* `{draft.id[:8]}` — {draft.channel}/{draft.kind}"
-        f" — created {draft.created_at[:19]}"
+def _short_preview(draft: drafts.Draft, *, with_header: bool = True) -> str:
+    payload = draft.payload if isinstance(draft.payload, dict) else {}
+    group = payload.get("group", draft.kind) or draft.kind
+    caption_raw = (
+        payload.get("caption")
+        or payload.get("content")
+        or payload.get("body")
+        or payload.get("text")
+        or ""
     )
-    return f"{head}\n\n{body}"
-
-
-def _format_draft_body(draft: drafts.Draft) -> str:
-    payload = draft.payload
-    fields: list[str] = []
-    for key in ("caption", "content", "body", "text", "imageUrl", "scheduledFor"):
-        v = payload.get(key)
-        if v:
-            fields.append(f"*{key}*: {str(v)[:600]}")
-    if not fields:
-        fields = [f"```\n{_pretty(payload)}\n```"]
-    if draft.edit_text:
-        fields.append(f"\n_owner edit:_ {draft.edit_text}")
-    return "\n".join(fields)
+    caption = str(caption_raw).strip().replace("\n", " ")
+    if len(caption) > DRAFT_CAPTION_PREVIEW:
+        caption = caption[:DRAFT_CAPTION_PREVIEW].rstrip() + "…"
+    body = f"{group}: {caption}" if caption else group
+    if not with_header:
+        return body
+    return f"📝 Draft {draft.id[:8]} · {body}"

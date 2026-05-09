@@ -44,7 +44,20 @@ when the backend is offline (a fallback catalog is baked into the
 static build). At runtime the chat widget and `/api/catalog` read the
 live MCP through the FastAPI backend.
 
-## 2. Five-minute demo (automated)
+## 2. One-port public demo (recommended)
+
+```bash
+./scripts/start_demo.sh
+```
+
+The script builds `web/` with relative API URLs, starts FastAPI on
+`:8000` (the storefront is mounted as a static catch-all), opens an
+ngrok tunnel, and prints the **public HTTPS URL**. Open the URL in a
+browser — the storefront and the chat widget post back to the same
+origin (no separate Astro server, no CORS gymnastics). Press Ctrl-C
+to stop both processes.
+
+## 3. Five-minute scoring demo (automated)
 
 ```bash
 ./scripts/demo.sh

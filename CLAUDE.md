@@ -58,11 +58,16 @@ package list.
 ## Repository layout
 
 ```
-agent/        Runtime persona — composed system prompt for `claude -p`
+agent/        Customer-facing runtime persona (website chat / WhatsApp / Instagram)
   SOUL.md     Identity, voice, values
   RULES.md    Hard + soft rules, escalation triggers
   TOOLS.md    MCP tool catalog with when-to-use guidance
   EXAMPLES.md Reference posts and reply templates
+owner_agent/  Owner-facing operations persona (Telegram bot)
+  SOUL.md     Operations-assistant identity (terse, business-aware, proactive)
+  RULES.md    No-JSON, brevity, ask-before-mutating rules
+  TOOLS.md    MCP catalog reframed for ops use
+  EXAMPLES.md Sample owner Q&A
 src/          Application code
   agents/     system_prompt.py (composer), claude_bridge.py (subprocess shim)
   bot/        aiogram Telegram handlers, FSM, middleware

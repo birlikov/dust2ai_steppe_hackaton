@@ -30,10 +30,11 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.agents.claude_bridge import build_default_bridge
-from src.core.config import get_settings
+from src.core.config import REPO_ROOT, get_settings
 from src.core.logging import get_logger
 from src.mcp.http_client import (
     HappycakeMcpClient,
@@ -323,6 +324,20 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
             "system", "inbound", {"channel": channel, "size": len(body)}
         )
         return {"status": "received"}
+
+    # Mount the Astro static build last so /api/* and /webhook/* match first.
+    # Conditional so unit tests (which don't run `npm run build`) still pass —
+    # a missing build silently disables the storefront route, not the API.
+    storefront_dir = REPO_ROOT / "web" / "dist"
+    if storefront_dir.exists():
+        app.mount(
+            "/",
+            StaticFiles(directory=str(storefront_dir), html=True),
+            name="storefront",
+        )
+        log.info("storefront.mounted", path=str(storefront_dir))
+    else:
+        log.info("storefront.skipped", reason="web/dist missing — build first")
 
     return app
 

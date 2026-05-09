@@ -3,8 +3,9 @@
  * Covers w3 (on-site assistant).
  *
  * Plain vanilla JS so it works without a bundler at runtime.
- * Reads API_BASE from the data-api attribute on the script tag,
- * or falls back to http://localhost:8000.
+ * Reads API_BASE from the data-api attribute on the script tag, or falls
+ * back to "" (relative URLs, same origin as the page). When FastAPI serves
+ * the storefront on the same port, this just works.
  */
 (function () {
   "use strict";
@@ -14,7 +15,7 @@
     // script element's id or look up the script by src.
     var scripts = document.querySelectorAll('script[src*="chat-widget"]');
     var s = scripts[scripts.length - 1];
-    return (s && s.dataset && s.dataset.api) || "http://localhost:8000";
+    return (s && s.dataset && s.dataset.api) || "";
   })();
 
   var SESSION_KEY = "hc_chat_session_id";

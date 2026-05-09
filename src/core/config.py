@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # --- Storage ---
     sqlite_path: Path = Field(default=REPO_ROOT / "data" / "state.db")
 
+    # --- Owner bot notifier ---
+    notifier_interval_s: int = 1800  # 30 min between proactive checks
+    owner_chat_id: int | None = None  # fallback if owner_identity isn't captured
+
     # --- Logging ---
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_json: bool = False  # human-readable in dev, JSON in prod

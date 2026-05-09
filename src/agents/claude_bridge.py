@@ -23,7 +23,7 @@ import os
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
-from src.agents.system_prompt import load_system_prompt
+from src.agents.system_prompt import load_owner_system_prompt, load_system_prompt
 from src.core.config import get_settings
 from src.core.logging import get_logger
 
@@ -153,9 +153,18 @@ def _build_prompt_body(
 
 
 def build_default_bridge() -> ClaudeBridge:
-    """Build a bridge from settings + the composed persona. Side-effect free."""
+    """Build the customer-facing bridge from settings + ``agent/``."""
     settings = get_settings()
     return ClaudeBridge(
         model=settings.anthropic_model,
         system_prompt=load_system_prompt(),
+    )
+
+
+def build_owner_bridge() -> ClaudeBridge:
+    """Build the owner-facing operations-assistant bridge from ``owner_agent/``."""
+    settings = get_settings()
+    return ClaudeBridge(
+        model=settings.anthropic_model,
+        system_prompt=load_owner_system_prompt(),
     )

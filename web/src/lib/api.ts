@@ -9,8 +9,10 @@
  *   - policies(): returns null (callers render a generic fallback)
  */
 
-const API_BASE =
-  import.meta.env.PUBLIC_API_BASE ?? "http://localhost:8000";
+// Empty string → relative URLs (same origin as the page). Set
+// PUBLIC_API_BASE=http://localhost:8000 in web/.env when running Astro
+// dev separately from the backend.
+const API_BASE = import.meta.env.PUBLIC_API_BASE ?? "";
 
 // ─── Response shapes ────────────────────────────────────────────────────────
 

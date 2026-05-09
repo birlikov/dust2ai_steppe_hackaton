@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, BotCommandScopeDefault
 
-from src.agents.claude_bridge import ClaudeBridge, build_default_bridge
+from src.agents.claude_bridge import (
+    ClaudeBridge,
+    build_default_bridge,
+    build_owner_bridge,
+)
+from src.bot import notifier as bot_notifier
 from src.bot.handlers import router as commands_router
 from src.bot.middleware import AuditMiddleware
 from src.bot.owner_commands import router as owner_router
@@ -49,7 +55,10 @@ def build_bot() -> Bot:
 
 def build_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=SqliteFsmStorage())
-    dp.message.middleware(AuditMiddleware())
+    # Register on ``update`` so the middleware fires for both messages and
+    # callback-query taps (inline-keyboard buttons need ``session_id`` injected
+    # too — without this the /drafts Approve/Edit/Reject taps silently die).
+    dp.update.middleware(AuditMiddleware())
     # Owner commands first so /dashboard etc. don't fall through to free-text.
     dp.include_router(owner_router)
     dp.include_router(commands_router)
@@ -58,6 +67,7 @@ def build_dispatcher() -> Dispatcher:
 
 async def run_polling(
     bridge: ClaudeBridge | None = None,
+    owner_bridge: ClaudeBridge | None = None,
     mcp: HappycakeMcpClient | None = None,
 ) -> None:
     bot = build_bot()
@@ -65,7 +75,13 @@ async def run_polling(
     await sync_commands(bot)
     log.info("telegram.start_polling")
     bridge = bridge or build_default_bridge()
-    log.info("agent.ready", model=bridge.model, command=bridge.command)
+    owner_bridge = owner_bridge or build_owner_bridge()
+    log.info(
+        "agent.ready",
+        model=bridge.model,
+        command=bridge.command,
+        owner_persona="owner_agent",
+    )
 
     owns_mcp = False
     if mcp is None:
@@ -76,12 +92,31 @@ async def run_polling(
             log.warning("mcp.boot_skipped", err=str(exc))
             mcp = None
 
+    settings = get_settings()
+    notifier_task: asyncio.Task[None] | None = None
+    if mcp is not None:
+        notifier_task = asyncio.create_task(
+            bot_notifier.run(
+                bot=bot,
+                mcp=mcp,
+                owner_bridge=owner_bridge,
+                interval_s=settings.notifier_interval_s,
+                fallback_chat_id=settings.owner_chat_id,
+            ),
+            name="owner-notifier",
+        )
+        log.info(
+            "notifier.scheduled",
+            interval_s=settings.notifier_interval_s,
+        )
+
     try:
         if mcp is not None:
             await dp.start_polling(
                 bot,
                 allowed_updates=dp.resolve_used_update_types(),
                 bridge=bridge,
+                owner_bridge=owner_bridge,
                 mcp=mcp,
             )
         else:
@@ -89,8 +124,13 @@ async def run_polling(
                 bot,
                 allowed_updates=dp.resolve_used_update_types(),
                 bridge=bridge,
+                owner_bridge=owner_bridge,
             )
     finally:
+        if notifier_task is not None and not notifier_task.done():
+            notifier_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await notifier_task
         if owns_mcp and mcp is not None:
             await mcp.__aexit__(None, None, None)
         await bot.session.close()

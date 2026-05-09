@@ -24,14 +24,18 @@ router = Router(name="commands")
 log = get_logger(__name__)
 
 HELP_TEXT = (
-    "Available commands:\n"
-    "/start      — begin a session\n"
-    "/help       — show this message\n"
-    "/dashboard  — sales, kitchen, evaluator snapshot\n"
-    "/budget     — marketing budget + recent leads\n"
-    "/drafts     — review pending drafts (Approve / Edit / Reject)\n"
-    "/cancel     — cancel the current operation\n"
-    "/restart    — wipe state and start over\n"
+    "I'm your operations assistant — talk to me about the business.\n\n"
+    "Examples:\n"
+    "  • \"anything urgent?\"\n"
+    "  • \"sales today?\"\n"
+    "  • \"how's the kitchen?\"\n"
+    "  • \"what's pending my approval?\"\n\n"
+    "Or use a shortcut:\n"
+    "  /dashboard  — today's sales + kitchen + what's urgent\n"
+    "  /budget     — marketing budget + recent website leads\n"
+    "  /drafts     — Instagram drafts waiting for your Approve / Edit / Reject\n"
+    "  /restart    — clear my conversation memory\n"
+    "  /cancel     — cancel the current step\n"
 )
 
 HISTORY_CAP = 24  # last N user/assistant text turns persisted per session
@@ -85,9 +89,9 @@ async def message_handler(
     message: Message,
     bot: Bot,
     session_id: str,
-    bridge: ClaudeBridge,
+    owner_bridge: ClaudeBridge,
 ) -> None:
-    """Dispatch a free-text message through the ``claude -p`` bridge."""
+    """Free-text from the owner. Routes through the ops persona."""
     text = message.text
     if not text:
         await message.answer("(text-only for now)")
@@ -97,11 +101,11 @@ async def message_handler(
 
     history = await _load_history(session_id)
     try:
-        reply_text = await bridge.query(text, history=history)
+        reply_text = await owner_bridge.query(text, history=history)
     except ClaudeBridgeError as exc:
-        log.error("bridge.query_failed", err=str(exc))
+        log.error("owner_bridge.query_failed", err=str(exc))
         await message.answer(
-            "I couldn't reach the model just now — please try again in a moment."
+            "Couldn't reach the assistant just now — try again in a moment."
         )
         await record(
             "system", "error", {"reason": str(exc)}, session_id=session_id

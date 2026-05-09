@@ -89,21 +89,51 @@ The same `Orchestrator` class serves the Telegram free-text handler, the
 on-site chat widget (`POST /api/chat`), and every WhatsApp / Instagram
 handler in `WorldPoller`. Channel-specific code only handles I/O.
 
-## 3. The runtime persona — `agent/`
+## 3. The runtime personas — `agent/` and `owner_agent/`
 
-Four small files, composed in deterministic order at module load time
-into one `--system-prompt` blob:
+We run **two** runtime personas. Each is four small files composed in
+deterministic order (SOUL → RULES → TOOLS → EXAMPLES) into one
+`--system-prompt` blob.
+
+### 3.1 Customer persona — `agent/`
+
+Used on the website chat widget, WhatsApp, Instagram, Google Business.
+Loaded by `system_prompt.load_system_prompt()` and passed to
+`build_default_bridge()`.
 
 | File | Job |
 |---|---|
 | `agent/SOUL.md` | Identity, brand values, voice character. Distilled from `HCU_BRANDBOOK.md` §1 + §2. |
 | `agent/RULES.md` | Hard rules (English-only, wordmark, cake-name placement, ≤3 emoji, MCP-first, no fabrication, kitchen-capacity precondition, owner-approval gate, never delete a comment) + soft rules + escalation triggers. |
-| `agent/TOOLS.md` | When-to-use guidance for every MCP tool, organised by family (`square_*`, `kitchen_*`, `marketing_*`, `whatsapp_*`, `instagram_*`, `gb_*`, `world_*`, `evaluator_*`). Sourced from `docs/mcp_inventory.md` after the recon pass. |
+| `agent/TOOLS.md` | When-to-use guidance for every MCP tool, organised by family. Sourced from `docs/mcp_inventory.md`. |
 | `agent/EXAMPLES.md` | Reference posts (brandbook Appendix C) + reply templates by interaction shape. |
 
+### 3.2 Owner persona — `owner_agent/`
+
+Used on the Telegram bot (free-text + slash-command summaries +
+proactive notifier). Loaded by `system_prompt.load_owner_system_prompt()`
+and passed to `build_owner_bridge()`. The customer persona is **never**
+used on Telegram — different audience, different rules.
+
+| File | Job |
+|---|---|
+| `owner_agent/SOUL.md` | Operations-assistant identity. Terse, business-aware, surfaces what needs attention. |
+| `owner_agent/RULES.md` | No JSON in messages; numbers in English; ≤4 short bullets; ask before mutating; escalate uncertainty; never delete a customer comment. |
+| `owner_agent/TOOLS.md` | Same MCP catalog as `agent/TOOLS.md` but reframed for ops use ("when the owner asks for sales today, call `square_get_pos_summary` and report orders + revenue + channel mix in two sentences"). Mutating channel tools require owner instruction in the same turn — otherwise the existing drafts approval queue. |
+| `owner_agent/EXAMPLES.md` | Sample owner Q&A (sales today, anything urgent, what's pending). |
+
 Each file is independently editable and reviewable. The composer
-(`src/agents/system_prompt.py`) caches the result for the lifetime of the
-process — restart the bot to pick up persona edits.
+(`src/agents/system_prompt.py`) caches each persona separately — restart
+the bot to pick up edits to either.
+
+### 3.3 Proactive notifier — `src/bot/notifier.py`
+
+An asyncio task running on `NOTIFIER_INTERVAL_S` (default 1800 s). Each
+tick: pull MCP state, diff against the previous tick's snapshot, and if
+anything material changed (new orders, new pending drafts, kitchen
+filling up) ask the owner-bridge for a 1-2 line English brief and push
+it to the owner's Telegram chat. Idle ticks stay silent. The task is
+cancellation-safe and never crashes the polling loop on errors.
 
 ## 4. Owner-side Telegram bot
 
