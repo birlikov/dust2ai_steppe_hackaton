@@ -29,10 +29,14 @@ class Settings(BaseSettings):
     # --- Telegram ---
     telegram_bot_token: str = ""
 
-    # --- Anthropic ---
-    anthropic_api_key: str = ""
-    anthropic_default_model: str = "claude-haiku-4-5"
-    anthropic_max_tokens: int = 1024
+    # --- Runtime LLM (claude -p subprocess) ---
+    # Model is pinned via the ANTHROPIC_MODEL env var the bridge sets per call.
+    # The brief mandates Opus 4.7; we expose it as a setting so tests can override.
+    anthropic_model: str = "claude-opus-4-7"
+
+    # --- Steppe Business Club hackathon MCP ---
+    sbc_mcp_url: str = "https://www.steppebusinessclub.com/api/mcp"
+    sbc_team_token: str = ""
 
     # --- Meta webhooks ---
     meta_verify_token: str = ""

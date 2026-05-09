@@ -7,7 +7,7 @@ from src.core.idempotency import derive_key
 
 def test_settings_load_with_defaults() -> None:
     s = get_settings()
-    assert s.anthropic_default_model == "claude-haiku-4-5"
+    assert s.anthropic_model == "claude-opus-4-7"
     assert s.log_level in {"DEBUG", "INFO", "WARNING", "ERROR"}
 
 

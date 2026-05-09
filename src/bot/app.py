@@ -9,15 +9,12 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, BotCommandScopeDefault
 
-from src.agents.loop import AgentLoop
-from src.agents.models import Tier
+from src.agents.claude_bridge import ClaudeBridge, build_default_bridge
 from src.bot.handlers import router
 from src.bot.middleware import AuditMiddleware
 from src.bot.storage import SqliteFsmStorage
 from src.core.config import get_settings
 from src.core.logging import get_logger
-from src.mcp.loader import load_config
-from src.mcp.registry import McpRegistry
 from src.storage import db
 
 log = get_logger(__name__)
@@ -52,24 +49,22 @@ def build_dispatcher() -> Dispatcher:
     return dp
 
 
-async def run_polling() -> None:
+async def run_polling(bridge: ClaudeBridge | None = None) -> None:
     bot = build_bot()
     dp = build_dispatcher()
     await sync_commands(bot)
     log.info("telegram.start_polling")
-    mcp_config = load_config()
-    async with McpRegistry(config=mcp_config) as registry:
-        agent = AgentLoop(registry=registry, tier=Tier.CHEAP)
-        log.info("agent.ready", tier=agent.tier.value, tools=len(registry.tools))
-        try:
-            await dp.start_polling(
-                bot,
-                agent=agent,
-                allowed_updates=dp.resolve_used_update_types(),
-            )
-        finally:
-            await bot.session.close()
-            await db.close()
+    bridge = bridge or build_default_bridge()
+    log.info("agent.ready", model=bridge.model, command=bridge.command)
+    try:
+        await dp.start_polling(
+            bot,
+            bridge=bridge,
+            allowed_updates=dp.resolve_used_update_types(),
+        )
+    finally:
+        await bot.session.close()
+        await db.close()
 
 
 def main() -> None:

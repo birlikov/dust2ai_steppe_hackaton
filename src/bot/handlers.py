@@ -1,8 +1,8 @@
 """Command and message handlers for the owner-facing Telegram bot.
 
-The plain-message handler dispatches to the Anthropic agent loop. The system
-prompt is a generic placeholder until the brief unlocks; the workflow router
-replaces it at H+0.
+Plain-message handler hands the user's text to the runtime persona via
+:class:`ClaudeBridge` (which shells out to ``claude -p``). The bridge owns the
+system prompt — handlers don't see it.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from src.agents.loop import AgentLoop
+from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.core.logging import get_logger
 from src.storage import sessions
 from src.storage.audit import record
@@ -30,15 +30,7 @@ HELP_TEXT = (
     "/restart  — wipe state and start over\n"
 )
 
-# Generic system prompt; replaced by workflow router at H+0.
-DEFAULT_SYSTEM_PROMPT = (
-    "You are an operations assistant for a small business owner. "
-    "Until the four workflows are configured, answer briefly and "
-    "conversationally. Be concise — one or two short paragraphs at most. "
-    "Never invent customer data; if you'd need a tool you don't have, say so."
-)
-
-HISTORY_CAP = 20  # last N user/assistant text turns kept in session.state
+HISTORY_CAP = 24  # last N user/assistant text turns persisted per session
 
 
 @router.message(Command("start"))
@@ -84,9 +76,9 @@ async def message_handler(
     message: Message,
     bot: Bot,
     session_id: str,
-    agent: AgentLoop,
+    bridge: ClaudeBridge,
 ) -> None:
-    """Dispatch a free-text message through the agent loop."""
+    """Dispatch a free-text message through the ``claude -p`` bridge."""
     text = message.text
     if not text:
         await message.answer("(text-only for now)")
@@ -96,31 +88,24 @@ async def message_handler(
 
     history = await _load_history(session_id)
     try:
-        reply = await agent.run(
-            system=DEFAULT_SYSTEM_PROMPT,
-            user_message=text,
-            history=history,  # type: ignore[arg-type]
+        reply_text = await bridge.query(text, history=history)
+    except ClaudeBridgeError as exc:
+        log.error("bridge.query_failed", err=str(exc))
+        await message.answer(
+            "I couldn't reach the model just now — please try again in a moment."
         )
-    except Exception as exc:
-        log.exception("agent.run_failed")
-        await message.answer("Hit an error reaching the model. Try again in a moment.")
         await record(
             "system", "error", {"reason": str(exc)}, session_id=session_id
         )
         return
 
-    reply_text = reply.text or "(no response)"
+    reply_text = reply_text or "(no response)"
     await message.answer(reply_text)
     await _append_history(session_id, history, text, reply_text)
     await record(
         "agent",
         "outbound",
-        {
-            "text": reply_text,
-            "iters": reply.iterations,
-            "stopped_for": reply.stopped_for,
-            "tool_calls": [c["name"] for c in reply.tool_calls],
-        },
+        {"text": reply_text},
         session_id=session_id,
     )
 

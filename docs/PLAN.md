@@ -152,8 +152,16 @@ Manual gates before each phase exit: live system runs the relevant flow without 
 ## Status
 
 - **Today is May 9, 2026 (kickoff day).** Brief unsealed; team token in hand.
-- **Last completed**: Plan finalization. All 12 gap-fixes locked.
-- **Next**: Phase 1 (runtime pivot + brief-analyst + mcp-recon).
-- **Background processes**: Telegram bot polling as `@dust2ai_steppehackaton_owner_bot` (PID 400126; safe to leave running or `pkill -f "src.bot.app"`).
+- **Last completed**: **Phase 1 — Pivot + recon.**
+  - Anthropic SDK stack removed (`src/agents/loop.py`, `models.py`, `tests/.../test_agent_loop.py`, `test_dry_run.py`, `src/mcp/anthropic_tools.py`, `anthropic` + `respx` deps).
+  - Runtime persona built under `agent/` (SOUL, RULES, TOOLS, EXAMPLES, README) — TOOLS sourced from `docs/mcp_inventory.md`.
+  - `src/agents/system_prompt.py` composes the persona; `src/agents/claude_bridge.py` shells out to `claude -p --system-prompt …` with `ANTHROPIC_MODEL=claude-opus-4-7` and a formatted history block. Tests mock the subprocess via an injected runner.
+  - `src/bot/handlers.py` + `src/bot/app.py` rewired to inject `bridge: ClaudeBridge` instead of `agent: AgentLoop`.
+  - `CLAUDE.md` rewritten as audience-neutral project description; dev rules in a "Working in this repo" appendix.
+  - `config/.env.example` cleaned (no `ANTHROPIC_API_KEY`; pinned `ANTHROPIC_MODEL=claude-opus-4-7`).
+  - `docs/specs.md` (60 ACs, 24 edge cases, 12 cross-cutting brand rules) and `docs/mcp_inventory.md` (55 tools across 8 families: square, kitchen, marketing, world, evaluator, whatsapp, instagram, gb) landed via brief-analyst + mcp-recon subagents.
+  - Quality gate: ruff clean, mypy strict clean, 45 pytests green.
+- **Next**: Phase 2 — Build (website + bot drafts + workflows + voice linter + retry helper). World engine becomes the integration backbone.
+- **Background processes**: nothing running. Bot will be relaunched at the start of Phase 2 with the bridge wired in. TG token rotated by user; verified before launch.
 
 This file gets updated by every Phase exit and at every commit boundary.
