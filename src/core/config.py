@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     # --- Owner bot notifier ---
     notifier_interval_s: int = 1800  # 30 min between proactive checks
     owner_chat_id: int | None = None  # fallback if owner_identity isn't captured
+    # If set, the bot only responds to chats paired by sending this exact
+    # passphrase (or to the chat already in `owner_identity`). Unset → open
+    # mode (dev / fresh-clone). Never commit a real value.
+    owner_passphrase: str = ""
 
     # --- Logging ---
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

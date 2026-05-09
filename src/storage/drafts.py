@@ -221,6 +221,13 @@ async def get_owner() -> OwnerIdentity | None:
     )
 
 
+async def forget_owner() -> None:
+    """Clear the owner pairing. The next message must re-pair via passphrase."""
+    conn = await get_connection()
+    await conn.execute("DELETE FROM owner_identity WHERE id = 1")
+    await conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # Leads (one-row-per-form-submission)
 # ---------------------------------------------------------------------------

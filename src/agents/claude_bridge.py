@@ -96,7 +96,19 @@ class ClaudeBridge:
         """
         body = _build_prompt_body(user_message, history)
         env = {**os.environ, "ANTHROPIC_MODEL": self.model}
-        argv = [self.command, "-p", "--system-prompt", self.system_prompt]
+        argv = [
+            self.command,
+            "-p",
+            # bypassPermissions lets the headless subprocess call MCP tools
+            # without an interactive permission prompt. The persona's hard
+            # rules constrain *which* tools — see owner_agent/RULES.md and
+            # agent/RULES.md. settings.local.json's permissions.allow list
+            # is the secondary belt-and-suspenders guard.
+            "--permission-mode",
+            "bypassPermissions",
+            "--system-prompt",
+            self.system_prompt,
+        ]
 
         try:
             rc, stdout, stderr = await self.runner(

@@ -1,5 +1,11 @@
 # HappyCake AI — Project description
 
+> **This file is for the developer working on the repo from a terminal.**
+> The runtime never sees it — `src/agents/claude_bridge.py` invokes
+> `claude -p --system-prompt …` which fully replaces Claude Code's default
+> system prompt. The customer-facing assistant is composed from `agent/`;
+> the owner-facing operations agent is composed from `owner_agent/`.
+
 > An AI-assisted sales and operations system for **HappyCake US** (Sugar Land, TX —
 > a family cake business). Submission for the Steppe Business Club hackathon
 > *Agentic AI for Real Business* (May 9–10, 2026).

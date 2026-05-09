@@ -1,0 +1,329 @@
+---
+/**
+ * Cashier hero — store-front chat at the top of the homepage.
+ *
+ * Visual framing: you're talking to the HappyCake cashier, not a chatbot.
+ * Hero photo backdrop with happy-blue-900 overlay, Cormorant headline, a
+ * cream chat panel below with suggested-prompt chips, an input row, and a
+ * scrollable transcript.
+ *
+ * Posts to `${API_BASE}/api/chat` (same origin in the one-port ngrok demo).
+ * Persists the session id in localStorage so a returning visitor keeps the
+ * conversation context.
+ */
+---
+
+<section class="cashier-hero">
+  <img
+    class="cashier-hero__bg"
+    src="/brand/hero/happy-cake-hero-01.webp"
+    alt=""
+    aria-hidden="true"
+    loading="eager"
+  />
+  <div class="cashier-hero__overlay" aria-hidden="true"></div>
+
+  <div class="cashier-hero__inner">
+    <p class="cashier-hero__eyebrow">◆ HappyCake · Sugar Land, TX</p>
+    <h1 class="cashier-hero__headline">Tell our cashier what you'd like.</h1>
+    <p class="cashier-hero__subhead">
+      Real cakes, hand-decorated in our kitchen this morning. Ask anything &mdash;
+      what's fresh today, what fits ten guests, custom for Saturday.
+    </p>
+
+    <div class="cashier-card" id="cashier-card" role="region" aria-label="Talk to the HappyCake cashier">
+      <div class="cashier-card__transcript" id="cashier-transcript" aria-live="polite" aria-atomic="false"></div>
+
+      <div class="cashier-card__chips" id="cashier-chips" role="list">
+        <button class="cashier-chip" type="button" data-prompt="What's fresh today?" role="listitem">What's fresh today?</button>
+        <button class="cashier-chip" type="button" data-prompt="I need a cake for ten guests" role="listitem">Cake for ten guests</button>
+        <button class="cashier-chip" type="button" data-prompt="Custom cake for Saturday" role="listitem">Custom for Saturday</button>
+        <button class="cashier-chip" type="button" data-prompt="Is the kitchen busy right now?" role="listitem">Kitchen busy?</button>
+      </div>
+
+      <form class="cashier-form" id="cashier-form" autocomplete="off">
+        <label for="cashier-input" class="sr-only">Your message</label>
+        <input
+          id="cashier-input"
+          name="message"
+          type="text"
+          class="cashier-input"
+          placeholder="What cake are you in the mood for?"
+          maxlength="500"
+          required
+        />
+        <button type="submit" class="cashier-send" id="cashier-send">Ask</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cashier-hero {
+    position: relative;
+    overflow: hidden;
+    color: var(--cream-50, #FBF6E8);
+  }
+  .cashier-hero__bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+  }
+  .cashier-hero__overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      rgba(14, 42, 60, 0.72) 0%,
+      rgba(14, 42, 60, 0.55) 50%,
+      rgba(14, 42, 60, 0.78) 100%
+    );
+    z-index: 1;
+  }
+  .cashier-hero__inner {
+    position: relative;
+    z-index: 2;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    text-align: center;
+  }
+  .cashier-hero__eyebrow {
+    font-family: "Inter", sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #BFD8E8;
+    margin-bottom: 1rem;
+  }
+  .cashier-hero__headline {
+    font-family: "Cormorant Garamond", "Cormorant", Georgia, serif;
+    font-size: clamp(2.25rem, 4vw + 1rem, 3.5rem);
+    font-weight: 600;
+    line-height: 1.1;
+    color: #FBF6E8;
+    margin: 0 0 0.85rem;
+  }
+  .cashier-hero__subhead {
+    font-family: "Inter", sans-serif;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: #BFD8E8;
+    max-width: 540px;
+    margin: 0 auto 2rem;
+  }
+
+  .cashier-card {
+    background: #FBF6E8;
+    color: #1A1816;
+    border: 0.5px solid rgba(14, 42, 60, 0.18);
+    padding: 1rem 1rem 0.85rem;
+    text-align: left;
+    box-shadow: 0 8px 28px rgba(14, 42, 60, 0.18);
+  }
+  .cashier-card__transcript {
+    max-height: 0;
+    overflow-y: auto;
+    transition: max-height 280ms ease;
+    font-family: "Inter", sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+  .cashier-card__transcript.has-messages {
+    max-height: 320px;
+    margin-bottom: 0.85rem;
+    padding: 0.5rem 0.25rem;
+  }
+  .cashier-card__transcript .cashier-msg {
+    margin: 0 0 0.6rem;
+    padding: 0.55rem 0.75rem;
+    max-width: 92%;
+  }
+  .cashier-card__transcript .cashier-msg--user {
+    background: #F4ECD3;
+    margin-left: auto;
+    text-align: right;
+  }
+  .cashier-card__transcript .cashier-msg--assistant {
+    background: #BFD8E8;
+    margin-right: auto;
+  }
+  .cashier-card__transcript .cashier-msg--error {
+    background: #E08066;
+    color: #FBF6E8;
+  }
+  .cashier-card__transcript .cashier-msg--typing {
+    font-style: italic;
+    opacity: 0.65;
+  }
+
+  .cashier-card__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.65rem;
+  }
+  .cashier-chip {
+    font-family: "Inter", sans-serif;
+    font-size: 0.85rem;
+    background: transparent;
+    border: 0.5px solid rgba(14, 42, 60, 0.4);
+    color: #1B4868;
+    padding: 0.35rem 0.7rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .cashier-chip:hover,
+  .cashier-chip:focus {
+    background: #1B4868;
+    color: #FBF6E8;
+    outline: none;
+  }
+
+  .cashier-form {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+  .cashier-input {
+    flex: 1 1 auto;
+    font-family: "Inter", sans-serif;
+    font-size: 1rem;
+    padding: 0.65rem 0.85rem;
+    border: 0.5px solid rgba(14, 42, 60, 0.4);
+    background: #FFFFFF;
+    color: #1A1816;
+    min-width: 0;
+  }
+  .cashier-input:focus {
+    border-color: #1B4868;
+    outline: 2px solid #3B7BA8;
+    outline-offset: -2px;
+  }
+  .cashier-send {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: #1B4868;
+    color: #FBF6E8;
+    border: none;
+    padding: 0 1.4rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .cashier-send:hover,
+  .cashier-send:focus {
+    background: #0E2A3C;
+    outline: none;
+  }
+  .cashier-send:disabled {
+    background: #3B7BA8;
+    cursor: not-allowed;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (min-width: 768px) {
+    .cashier-hero__inner {
+      padding: 5.5rem 1.5rem 4rem;
+    }
+  }
+</style>
+
+<script is:inline define:vars={{ apiBase: import.meta.env.PUBLIC_API_BASE ?? "" }}>
+  (function () {
+    "use strict";
+    const STORAGE_KEY = "hc_cashier_session_id";
+    let sessionId = localStorage.getItem(STORAGE_KEY);
+    let pending = false;
+
+    const transcript = document.getElementById("cashier-transcript");
+    const form = document.getElementById("cashier-form");
+    const input = document.getElementById("cashier-input");
+    const send = document.getElementById("cashier-send");
+    const chips = document.getElementById("cashier-chips");
+
+    if (!transcript || !form || !input || !send || !chips) return;
+
+    function appendMessage(text, role) {
+      const div = document.createElement("div");
+      div.className = "cashier-msg cashier-msg--" + role;
+      div.textContent = text;
+      transcript.appendChild(div);
+      transcript.classList.add("has-messages");
+      transcript.scrollTop = transcript.scrollHeight;
+      return div;
+    }
+
+    async function sendMessage(message) {
+      if (!message || pending) return;
+      pending = true;
+      send.disabled = true;
+      input.value = "";
+
+      appendMessage(message, "user");
+      const typing = appendMessage("Asking the cashier…", "typing");
+
+      try {
+        const res = await fetch(apiBase + "/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ session_id: sessionId, message: message }),
+        });
+        typing.remove();
+
+        if (!res.ok) {
+          appendMessage(
+            "I couldn't reach the team's assistant just now — please try again in a moment.",
+            "error"
+          );
+          return;
+        }
+
+        const data = await res.json();
+        if (data.session_id && data.session_id !== sessionId) {
+          sessionId = data.session_id;
+          localStorage.setItem(STORAGE_KEY, sessionId);
+        }
+        appendMessage(data.reply || "(no response)", "assistant");
+      } catch (err) {
+        typing.remove();
+        appendMessage(
+          "Couldn't reach the cashier — please try again.",
+          "error"
+        );
+      } finally {
+        pending = false;
+        send.disabled = false;
+        input.focus();
+      }
+    }
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      const message = (input.value || "").trim();
+      sendMessage(message);
+    });
+
+    chips.addEventListener("click", function (event) {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const prompt = target.dataset.prompt;
+      if (!prompt) return;
+      sendMessage(prompt);
+    });
+  })();
+</script>

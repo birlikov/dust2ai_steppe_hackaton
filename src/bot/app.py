@@ -16,6 +16,7 @@ from src.agents.claude_bridge import (
     build_owner_bridge,
 )
 from src.bot import notifier as bot_notifier
+from src.bot.auth import AuthMiddleware
 from src.bot.handlers import router as commands_router
 from src.bot.middleware import AuditMiddleware
 from src.bot.owner_commands import router as owner_router
@@ -34,7 +35,8 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="budget", description="Marketing budget + recent leads"),
     BotCommand(command="drafts", description="Review pending drafts"),
     BotCommand(command="cancel", description="Cancel the current operation"),
-    BotCommand(command="restart", description="Wipe state and start over"),
+    BotCommand(command="restart", description="Wipe conversation memory"),
+    BotCommand(command="logout", description="Unpair this chat from the owner role"),
 ]
 
 
@@ -55,10 +57,10 @@ def build_bot() -> Bot:
 
 def build_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=SqliteFsmStorage())
-    # Register on ``update`` so the middleware fires for both messages and
-    # callback-query taps (inline-keyboard buttons need ``session_id`` injected
-    # too — without this the /drafts Approve/Edit/Reject taps silently die).
+    # Order matters: audit first (sets session_id), auth second (gates the
+    # owner passphrase). Both fire on every update type.
     dp.update.middleware(AuditMiddleware())
+    dp.update.middleware(AuthMiddleware())
     # Owner commands first so /dashboard etc. don't fall through to free-text.
     dp.include_router(owner_router)
     dp.include_router(commands_router)

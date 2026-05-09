@@ -24,22 +24,33 @@ AGENT_DIR: Path = REPO_ROOT / "agent"
 OWNER_AGENT_DIR: Path = REPO_ROOT / "owner_agent"
 
 # Order matters: SOUL first (identity), then RULES (constraints), then TOOLS
-# (capabilities), then EXAMPLES (style anchors). Each section is wrapped in a
+# (capabilities), then EXAMPLES (style anchors), then SKILLS (composable
+# multi-tool recipes — owner persona only). Each section is wrapped in a
 # clear heading so the runtime model can refer to it.
-SECTION_ORDER: tuple[str, ...] = ("SOUL", "RULES", "TOOLS", "EXAMPLES")
+SECTION_ORDER: tuple[str, ...] = ("SOUL", "RULES", "TOOLS", "EXAMPLES", "SKILLS")
+REQUIRED_SECTIONS: frozenset[str] = frozenset({"SOUL", "RULES", "TOOLS", "EXAMPLES"})
 
 
 class PersonaLoadError(RuntimeError):
-    """Raised when one or more persona files are missing or unreadable."""
+    """Raised when a required persona section is missing or unreadable."""
 
 
-def _read_section(persona_dir: Path, name: str) -> str:
+def _read_section(persona_dir: Path, name: str) -> str | None:
+    """Return the section body, or ``None`` if optional and missing.
+
+    SKILLS is optional — only the owner persona ships one. Missing required
+    sections still raise.
+    """
     path = persona_dir / f"{name}.md"
     if not path.exists():
-        raise PersonaLoadError(f"persona section missing: {path}")
+        if name in REQUIRED_SECTIONS:
+            raise PersonaLoadError(f"persona section missing: {path}")
+        return None
     text = path.read_text(encoding="utf-8").strip()
     if not text:
-        raise PersonaLoadError(f"persona section empty: {path}")
+        if name in REQUIRED_SECTIONS:
+            raise PersonaLoadError(f"persona section empty: {path}")
+        return None
     return text
 
 
@@ -47,6 +58,8 @@ def _compose(persona_dir: Path) -> str:
     parts: list[str] = []
     for section in SECTION_ORDER:
         body = _read_section(persona_dir, section)
+        if body is None:
+            continue
         parts.append(f"## {section}\n\n{body}")
     return "\n\n---\n\n".join(parts)
 

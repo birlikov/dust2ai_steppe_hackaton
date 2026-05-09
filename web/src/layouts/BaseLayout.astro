@@ -6,6 +6,11 @@ interface Props {
   description?: string;
   canonicalUrl?: string;
   ogImage?: string;
+  /**
+   * When true, the floating chat-widget script is not injected. Set on
+   * pages that already have an inline chat (e.g. the cashier hero on `/`).
+   */
+  hideFloatingChat?: boolean;
 }
 
 const {
@@ -13,6 +18,7 @@ const {
   description = "Real cakes, made by hand in our Sugar Land, TX kitchen. Cake \"Honey\", cake \"Napoleon\", cake \"Milk Maiden\" and more. Order on the site or WhatsApp.",
   canonicalUrl = Astro.url.href,
   ogImage = "/brand/logo/happy-cake-logo-1024.png",
+  hideFloatingChat = false,
 } = Astro.props;
 
 const fullTitle = title === "HappyCake" ? title : `${title} — HappyCake`;
@@ -135,12 +141,17 @@ const fullTitle = title === "HappyCake" ? title : `${title} — HappyCake`;
       </div>
     </footer>
 
-    <!-- Chat widget — pass API base via data attribute -->
-    <div id="chat-widget-root"></div>
-    <script
-      src="/chat-widget.js"
-      data-api={import.meta.env.PUBLIC_API_BASE ?? "http://localhost:8000"}
-      defer
-    ></script>
+    {!hideFloatingChat && (
+      <>
+        <!-- Floating chat widget on inner pages. Hidden on `/` because the
+             cashier hero there is the primary chat surface. -->
+        <div id="chat-widget-root"></div>
+        <script
+          src="/chat-widget.js"
+          data-api={import.meta.env.PUBLIC_API_BASE ?? ""}
+          defer
+        ></script>
+      </>
+    )}
   </body>
 </html>

@@ -55,8 +55,13 @@ async def test_query_passes_system_prompt_and_pinned_model() -> None:
     assert isinstance(argv, list)
     assert argv[0] == "/usr/bin/true"
     assert argv[1] == "-p"
-    assert argv[2] == "--system-prompt"
-    assert argv[3] == "SYS"
+    # Permission mode + system prompt are passed in some order; assert
+    # presence rather than position so future flag additions don't churn
+    # this test.
+    assert "--permission-mode" in argv
+    assert argv[argv.index("--permission-mode") + 1] == "bypassPermissions"
+    assert "--system-prompt" in argv
+    assert argv[argv.index("--system-prompt") + 1] == "SYS"
     env = captured["env"]
     assert isinstance(env, dict)
     assert env["ANTHROPIC_MODEL"] == "claude-opus-4-7"

@@ -84,6 +84,21 @@ async def cmd_restart(message: Message, state: FSMContext, session_id: str) -> N
     await record("agent", "outbound", {"text": "restart"}, session_id=session_id)
 
 
+@router.message(Command("logout"))
+async def cmd_logout(message: Message, session_id: str) -> None:
+    """Clear the owner pairing. Next message must re-pair via passphrase."""
+    await drafts.forget_owner()
+    await message.answer(
+        "Unpaired. The next message must include the passphrase to unlock."
+    )
+    await record(
+        "agent",
+        "outbound",
+        {"text": "logout", "chat_id": message.chat.id},
+        session_id=session_id,
+    )
+
+
 @router.message()
 async def message_handler(
     message: Message,
