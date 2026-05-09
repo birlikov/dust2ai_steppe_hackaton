@@ -133,7 +133,10 @@ class OrderRequest(BaseModel):
     items: list[OrderItem] = Field(min_length=1, max_length=12)
     customer: OrderCustomer
     fulfillment: OrderFulfillment = Field(default_factory=OrderFulfillment)
-    source: str = Field(default="website", pattern="^(website|agent|telegram|walk-in)$")
+    source: str = Field(
+        default="website",
+        pattern="^(website|agent|telegram|whatsapp|instagram|walk-in)$",
+    )
     idempotency_key: str | None = Field(default=None, max_length=120)
 
 

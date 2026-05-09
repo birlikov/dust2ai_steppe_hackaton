@@ -205,45 +205,85 @@
     line-height: 1.55;
   }
   .cashier-card__transcript.has-messages {
-    max-height: 320px;
+    max-height: 420px;
     margin-bottom: 0.85rem;
-    padding: 0.5rem 0.25rem;
+    padding: 0.75rem 0.25rem;
   }
-  .cashier-card__transcript .cashier-msg {
-    margin: 0 0 0.55rem;
-    padding: 0.55rem 0.85rem;
-    max-width: 86%;
-    border-radius: 0;
-    line-height: 1.45;
+  .cashier-card__transcript .cashier-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin: 0 0 0.85rem;
     animation: cashier-fade 180ms ease both;
+  }
+  .cashier-card__transcript .cashier-row--user {
+    flex-direction: row-reverse;
   }
   @keyframes cashier-fade {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  .cashier-card__transcript .cashier-msg--user {
+  .cashier-avatar {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
     background: #1B4868;
     color: #FBF6E8;
-    margin-left: auto;
-    text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Inter", sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
-  .cashier-card__transcript .cashier-msg--assistant {
+  .cashier-row--assistant .cashier-avatar {
+    background: #6E9D74;
+  }
+  .cashier-bubble-wrap {
+    max-width: calc(100% - 38px);
+    display: flex;
+    flex-direction: column;
+  }
+  .cashier-row--user .cashier-bubble-wrap { align-items: flex-end; }
+  .cashier-bubble-label {
+    font-family: "Inter", sans-serif;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(14, 42, 60, 0.5);
+    margin-bottom: 0.15rem;
+  }
+  .cashier-bubble {
+    padding: 0.6rem 0.9rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+  }
+  .cashier-row--user .cashier-bubble {
+    background: #1B4868;
+    color: #FBF6E8;
+    border-bottom-right-radius: 0;
+    border-radius: 12px 12px 0 12px;
+  }
+  .cashier-row--assistant .cashier-bubble {
     background: #F4ECD3;
     color: #1A1816;
-    margin-right: auto;
-    border-left: 2px solid #1B4868;
+    border-radius: 12px 12px 12px 0;
   }
-  .cashier-card__transcript .cashier-msg--error {
+  .cashier-row--error .cashier-bubble {
     background: #E08066;
     color: #FBF6E8;
+    border-radius: 12px;
   }
-  .cashier-card__transcript .cashier-msg--typing {
+  .cashier-row--typing .cashier-bubble {
     font-style: italic;
     opacity: 0.7;
     background: transparent;
-    border-left: none;
+    padding-left: 0.2rem;
   }
-  .cashier-card__transcript .cashier-msg--typing::after {
+  .cashier-row--typing .cashier-bubble::after {
     content: "…";
     display: inline-block;
     margin-left: 0.2rem;
@@ -254,6 +294,22 @@
     25% { content: "."; }
     50% { content: ".."; }
     75%, 100% { content: "..."; }
+  }
+  /* Markdown content inside assistant bubbles. */
+  .cashier-bubble p { margin: 0 0 0.4em; }
+  .cashier-bubble p:last-child { margin-bottom: 0; }
+  .cashier-bubble ul {
+    margin: 0.3em 0 0.3em 1.1em;
+    padding: 0;
+    list-style: disc;
+  }
+  .cashier-bubble li { margin: 0.1em 0; }
+  .cashier-bubble strong { font-weight: 600; }
+  .cashier-bubble em { font-style: italic; }
+  .cashier-bubble code {
+    background: rgba(14, 42, 60, 0.08);
+    padding: 0 0.25em;
+    font-size: 0.92em;
   }
 
   .cashier-card__chips {
@@ -375,14 +431,117 @@
       return "idle";
     }
 
+    var CLOSING_RE = /\s*(?:[—-]\s*)?Order on the site at happycake\.us[^\n]*$/i;
+    var SIGN_RE = /\s*[—-]\s*the HappyCake team\s*$/i;
+
+    function cleanReply(text) {
+      // The cashier is literally on the site — strip the closing pattern
+      // and the team-sign-off so chat replies don't read like marketing posts.
+      var t = String(text || "").trim();
+      t = t.replace(CLOSING_RE, "").trim();
+      t = t.replace(SIGN_RE, "").trim();
+      return t;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+
+    function renderMarkdown(text) {
+      // Tiny, conservative md → html. Supports: bullets (- / *), bold,
+      // italic, inline code, paragraph breaks. Anything else stays text.
+      var lines = String(text).split(/\r?\n/);
+      var out = [];
+      var inList = false;
+      var paragraph = [];
+
+      function flushParagraph() {
+        if (paragraph.length === 0) return;
+        var html = paragraph.join(" ").trim();
+        if (html) out.push("<p>" + inlineMd(html) + "</p>");
+        paragraph = [];
+      }
+      function closeList() {
+        if (inList) {
+          out.push("</ul>");
+          inList = false;
+        }
+      }
+      function inlineMd(s) {
+        s = escapeHtml(s);
+        // **bold** → <strong>
+        s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+        // *italic* / _italic_  (only when surrounded by word boundaries)
+        s = s.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?]|$)/g, "$1<em>$2</em>");
+        s = s.replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?]|$)/g, "$1<em>$2</em>");
+        // `code`
+        s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+        return s;
+      }
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (line === "") {
+          flushParagraph();
+          closeList();
+          continue;
+        }
+        var bulletMatch = line.match(/^[-*•]\s+(.*)$/);
+        if (bulletMatch) {
+          flushParagraph();
+          if (!inList) {
+            out.push("<ul>");
+            inList = true;
+          }
+          out.push("<li>" + inlineMd(bulletMatch[1]) + "</li>");
+          continue;
+        }
+        if (inList) closeList();
+        paragraph.push(line);
+      }
+      flushParagraph();
+      closeList();
+      if (out.length === 0) out.push("<p>" + inlineMd(escapeHtml(text)) + "</p>");
+      return out.join("");
+    }
+
     function appendMessage(text, role) {
-      const div = document.createElement("div");
-      div.className = "cashier-msg cashier-msg--" + role;
-      div.textContent = text;
-      transcript.appendChild(div);
+      var row = document.createElement("div");
+      row.className = "cashier-row cashier-row--" + role;
+
+      var avatar = document.createElement("div");
+      avatar.className = "cashier-avatar";
+      avatar.textContent = role === "user" ? "you" : "HC";
+      avatar.setAttribute("aria-hidden", "true");
+
+      var wrap = document.createElement("div");
+      wrap.className = "cashier-bubble-wrap";
+
+      var label = document.createElement("div");
+      label.className = "cashier-bubble-label";
+      label.textContent = role === "user" ? "you" : role === "assistant" ? "cashier" : role;
+
+      var bubble = document.createElement("div");
+      bubble.className = "cashier-bubble";
+
+      if (role === "assistant") {
+        bubble.innerHTML = renderMarkdown(cleanReply(text));
+      } else if (role === "typing") {
+        bubble.textContent = text;
+      } else {
+        bubble.textContent = text;
+      }
+
+      wrap.appendChild(label);
+      wrap.appendChild(bubble);
+      row.appendChild(avatar);
+      row.appendChild(wrap);
+      transcript.appendChild(row);
       transcript.classList.add("has-messages");
       transcript.scrollTop = transcript.scrollHeight;
-      return div;
+      return row;
     }
 
     async function sendMessage(message) {

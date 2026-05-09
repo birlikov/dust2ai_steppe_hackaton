@@ -7,6 +7,8 @@ system prompt — handlers don't see it.
 
 from __future__ import annotations
 
+import json as _json
+from datetime import UTC, datetime
 from typing import Any
 
 from aiogram import Bot, Router
@@ -19,6 +21,7 @@ from src.core.logging import get_logger
 from src.core.voice import LintRequest, lint
 from src.storage import drafts, sessions
 from src.storage.audit import record
+from src.storage.db import get_connection
 
 router = Router(name="commands")
 log = get_logger(__name__)
@@ -59,7 +62,11 @@ async def cmd_start(message: Message, state: FSMContext, session_id: str) -> Non
 
 @router.message(Command("help"))
 async def cmd_help(message: Message, session_id: str) -> None:
-    await message.answer(HELP_TEXT)
+    try:
+        await message.answer(HELP_TEXT, parse_mode="Markdown")
+    except Exception as exc:
+        log.warning("help.markdown_failed", err=str(exc))
+        await message.answer(HELP_TEXT)
     await record("agent", "outbound", {"text": "help"}, session_id=session_id)
 
 
@@ -110,6 +117,10 @@ async def message_handler(
     text = message.text
     if not text:
         await message.answer("(text-only for now)")
+        return
+
+    # If the previous tap was Edit on a draft, this message is the new copy.
+    if await _try_consume_edit(message, session_id, text):
         return
 
     await bot.send_chat_action(message.chat.id, "typing")
@@ -168,7 +179,14 @@ async def message_handler(
 
     reply_text = reply_text or "(no response)"
     voice_warnings = lint(LintRequest(text=reply_text, channel="telegram"))
-    await message.answer(reply_text)
+    # Owner persona writes inline markdown (*bold*, _italic_, bullets, emojis).
+    # Telegram renders Markdown when parse_mode is set; fall back to plain
+    # text on render errors so a stray asterisk never blocks the reply.
+    try:
+        await message.answer(reply_text, parse_mode="Markdown")
+    except Exception as exc:
+        log.warning("telegram.markdown_render_failed", err=str(exc))
+        await message.answer(reply_text)
     await _append_history(session_id, history, text, reply_text)
     await record(
         "agent",
@@ -179,6 +197,75 @@ async def message_handler(
         },
         session_id=session_id,
     )
+
+
+async def _try_consume_edit(
+    message: Message, session_id: str, text: str
+) -> bool:
+    """If the chat is awaiting a draft edit, apply this message as new text.
+
+    Returns True if this message was consumed as an edit (caller short-
+    circuits and does NOT route through the bridge).
+    """
+    sess = await sessions.get_by_id(session_id)
+    if sess is None:
+        return False
+    draft_id = sess.state.get("awaiting_edit_draft_id")
+    if not isinstance(draft_id, str) or not draft_id:
+        return False
+
+    # Clear the FSM flag immediately so a follow-up message routes normally.
+    await sessions.merge_state(session_id, {"awaiting_edit_draft_id": None})
+
+    new_text = text.strip()
+    if not new_text:
+        await message.answer(
+            "Empty edit — left the draft as it was. "
+            "Tap *📝 Edit* in /inbox to retry.",
+            parse_mode="Markdown",
+        )
+        return True
+
+    draft = await drafts.get(draft_id)
+    if draft is None:
+        await message.answer("That draft is gone — nothing to update.")
+        return True
+
+    # Update the draft payload's caption (or text/body) and re-queue as
+    # pending so /inbox picks it up for fresh approval.
+    payload = dict(draft.payload) if isinstance(draft.payload, dict) else {}
+    field_name = next(
+        (k for k in ("caption", "content", "body", "text") if k in payload),
+        "caption",
+    )
+    payload[field_name] = new_text
+
+    conn = await get_connection()
+    await conn.execute(
+        "UPDATE drafts SET payload = ?, edit_text = ?, status = 'pending', "
+        "updated_at = ? WHERE id = ?",
+        (
+            _json.dumps(payload),
+            new_text,
+            datetime.now(UTC).isoformat(),
+            draft_id,
+        ),
+    )
+    await conn.commit()
+
+    preview = new_text[:400]
+    await message.answer(
+        f"✅ *Draft updated.* Back in your /inbox waiting for approval.\n\n"
+        f"_New copy:_\n{preview}",
+        parse_mode="Markdown",
+    )
+    await record(
+        "agent",
+        "outbound",
+        {"draft_action": "edit:applied", "draft_id": draft_id},
+        session_id=session_id,
+    )
+    return True
 
 
 # Mutating MCP tools — surfaced to the owner so they see what the bot did.

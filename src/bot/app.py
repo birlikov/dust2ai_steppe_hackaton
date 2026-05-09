@@ -30,11 +30,11 @@ log = get_logger(__name__)
 
 BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="start", description="Begin a session"),
-    BotCommand(command="help", description="Show available commands"),
-    BotCommand(command="dashboard", description="Sales / kitchen / evaluator snapshot"),
+    BotCommand(command="help", description="Show what I can do"),
+    BotCommand(command="dashboard", description="Today's sales, kitchen, what's urgent"),
     BotCommand(command="budget", description="Marketing budget + recent leads"),
-    BotCommand(command="drafts", description="Review pending drafts"),
-    BotCommand(command="cancel", description="Cancel the current operation"),
+    BotCommand(command="inbox", description="Items waiting for your Approve / Edit / Reject"),
+    BotCommand(command="cancel", description="Cancel the current step"),
     BotCommand(command="restart", description="Wipe conversation memory"),
     BotCommand(command="logout", description="Unpair this chat from the owner role"),
 ]

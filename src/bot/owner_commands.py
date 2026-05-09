@@ -28,7 +28,7 @@ from src.mcp.http_client import (
     McpTransportError,
     call_with_retry,
 )
-from src.storage import drafts
+from src.storage import drafts, sessions
 from src.storage.audit import record
 
 log = get_logger(__name__)
@@ -136,27 +136,37 @@ async def cmd_budget(
 # ---------------------------------------------------------------------------
 
 
-@router.message(Command("drafts"))
-async def cmd_drafts(message: Message, bot: Bot, session_id: str) -> None:
+@router.message(Command("inbox", "drafts"))
+async def cmd_inbox(message: Message, bot: Bot, session_id: str) -> None:
+    """List everything waiting on the owner. /drafts kept as alias."""
     await bot.send_chat_action(message.chat.id, "typing")
     pending = await drafts.list_status("pending")
     if not pending:
-        await message.answer("Nothing pending. Inbox is clear.")
+        await message.answer(
+            "📭 *Inbox clear.* Nothing waiting on you.",
+            parse_mode="Markdown",
+        )
         await record(
-            "agent", "outbound", {"text": "drafts:none"}, session_id=session_id
+            "agent", "outbound", {"text": "inbox:empty"}, session_id=session_id
         )
         return
-    await message.answer(f"{len(pending)} draft(s) waiting on you:")
+    intro = f"📥 *{len(pending)} item(s)* waiting for your call:"
+    await message.answer(intro, parse_mode="Markdown")
     for draft in pending:
         preview = _short_preview(draft)
-        await message.answer(
-            preview,
-            reply_markup=draft_keyboard(draft.id),
-        )
+        try:
+            await message.answer(
+                preview,
+                reply_markup=draft_keyboard(draft.id),
+                parse_mode="Markdown",
+            )
+        except Exception as exc:
+            log.warning("inbox.preview_markdown_failed", err=str(exc))
+            await message.answer(preview, reply_markup=draft_keyboard(draft.id))
     await record(
         "agent",
         "outbound",
-        {"text": "drafts:list", "count": len(pending)},
+        {"text": "inbox:list", "count": len(pending)},
         session_id=session_id,
     )
 
@@ -205,18 +215,22 @@ async def cb_draft(
             session_id=session_id,
         )
     elif action == "edit":
-        await drafts.edit(draft_id, "(owner requested edit — re-generate)")
-        await callback.answer(
-            "Edit requested — the next pass regenerates this draft."
+        # Park the chat in "awaiting edit" mode. The next message handler
+        # in src/bot/handlers.py picks the new text up and updates the
+        # draft, then re-enables the chat for normal use.
+        await sessions.merge_state(
+            session_id, {"awaiting_edit_draft_id": draft_id}
         )
+        await callback.answer("Send your replacement text as the next message.")
         await _safe_callback_edit(
             callback,
-            f"📝 Edit requested — {_short_preview(draft, with_header=False)}",
+            f"📝 *Editing draft.* Send the new text in the next message.\n\n"
+            f"_Current copy:_\n{_short_preview(draft, with_header=False)}",
         )
         await record(
             "agent",
             "outbound",
-            {"draft_action": "edit", "draft_id": draft_id},
+            {"draft_action": "edit:start", "draft_id": draft_id},
             session_id=session_id,
         )
 

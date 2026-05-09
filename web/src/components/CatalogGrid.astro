@@ -2,17 +2,11 @@
 /**
  * CatalogGrid — full responsive product grid for /menu.
  *
- * Reads from `/api/catalog` at build time (falls back to whatever the
- * fetchCatalog helper returns). Each card has Add-to-cart wired to a
- * `hc_cart` localStorage list; the badge in BaseLayout listens for the
- * `hc-cart-changed` event.
+ * Renders an empty shell at build time and fetches `/api/catalog`
+ * client-side on page load. This avoids the build-time-empty-catalog
+ * problem (when `npm run build` runs before uvicorn is up, the page
+ * still works — products just appear once the backend is reachable).
  */
-import { fetchCatalog } from "../lib/api";
-import type { Product } from "../lib/api";
-
-const catalog = await fetchCatalog();
-const products: Product[] = catalog?.products ?? [];
-const overCapacity = catalog?.kitchen?.overCapacity ?? false;
 ---
 
 <section class="max-w-5xl mx-auto px-4 py-12">
@@ -26,73 +20,42 @@ const overCapacity = catalog?.kitchen?.overCapacity ?? false;
         Time-tested recipes, hand-decorated and hand-packed.
       </p>
     </div>
-    {overCapacity && (
-      <p class="text-xs text-text-primary font-body bg-cream-200 card-border px-3 py-2">
-        Kitchen is at capacity today. Orders shift to tomorrow.
-      </p>
-    )}
+    <p
+      id="catalog-capacity"
+      class="text-xs text-text-primary font-body bg-cream-200 card-border px-3 py-2 hidden"
+    >Kitchen is at capacity today. Orders shift to tomorrow.</p>
   </div>
 
-  {products.length === 0 ? (
-    <div class="card-border bg-cream-100 p-8 text-center">
-      <p class="font-display text-2xl text-happy-blue-700 mb-2">
-        We&rsquo;re updating the menu.
-      </p>
-      <p class="text-sm text-text-primary">
-        Please check back in a moment, or
-        <a href="https://wa.me/12815550100" rel="noopener noreferrer" target="_blank">
-          send us a WhatsApp message
-        </a>.
-      </p>
-    </div>
-  ) : (
-    <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 list-none m-0 p-0">
-      {products.map((product) => (
-        <li class="card-border bg-cream-100 flex flex-col">
-          <a href={`/cake/${product.slug}`} class="no-underline">
-            <img
-              src={product.image.replace("/assets/brand", "/brand")}
-              alt={product.name}
-              width="400"
-              height="280"
-              class="w-full h-44 object-cover"
-              loading="lazy"
-            />
-          </a>
-          <div class="p-5 flex flex-col flex-1">
-            <p class="cake-name-label text-happy-blue-700 mb-1">{product.category}</p>
-            <h3 class="font-display text-lg font-semibold text-happy-blue-900 mb-2 leading-snug">
-              <a href={`/cake/${product.slug}`} class="text-happy-blue-900 hover:text-happy-blue-700 no-underline">
-                {product.name}
-              </a>
-            </h3>
-            <p class="text-sm text-text-primary mb-3 leading-relaxed flex-1">
-              {product.description}
-            </p>
-            <p class="font-body font-medium text-sm text-happy-blue-900 mb-4">
-              {product.weightLabel ? `${product.weightLabel}, ` : ""}{product.priceFormatted}
-            </p>
-            <button
-              type="button"
-              class="add-to-cart btn-primary w-full"
-              data-slug={product.slug}
-              data-name={product.name}
-              data-price={product.priceUsd}
-              data-image={product.image.replace("/assets/brand", "/brand")}
-            >
-              Add to cart
-            </button>
-          </div>
-        </li>
-      ))}
-    </ul>
-  )}
+  <div id="catalog-loading" class="card-border bg-cream-50 p-6 text-center text-sm text-text-primary opacity-70">
+    Loading the menu…
+  </div>
+
+  <div id="catalog-error" class="card-border bg-cream-100 p-8 text-center hidden">
+    <p class="font-display text-2xl text-happy-blue-700 mb-2">
+      We&rsquo;re updating the menu.
+    </p>
+    <p class="text-sm text-text-primary">
+      Please check back in a moment, or
+      <a href="https://wa.me/12815550100" rel="noopener noreferrer" target="_blank">
+        send us a WhatsApp message
+      </a>.
+    </p>
+  </div>
+
+  <ul id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 list-none m-0 p-0 hidden"></ul>
 </section>
 
-<script is:inline>
+<script is:inline define:vars={{ apiBase: import.meta.env.PUBLIC_API_BASE ?? "" }}>
   (function () {
     "use strict";
     var STORAGE_KEY = "hc_cart";
+
+    var loadingEl = document.getElementById("catalog-loading");
+    var errorEl = document.getElementById("catalog-error");
+    var gridEl = document.getElementById("catalog-grid");
+    var capacityEl = document.getElementById("catalog-capacity");
+
+    if (!gridEl || !loadingEl || !errorEl) return;
 
     function readCart() {
       try {
@@ -100,22 +63,69 @@ const overCapacity = catalog?.kitchen?.overCapacity ?? false;
         return raw ? JSON.parse(raw) : [];
       } catch (e) { return []; }
     }
-
     function writeCart(cart) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
       window.dispatchEvent(new CustomEvent("hc-cart-changed"));
     }
-
-    function addToCart(slug, name, price, image) {
-      var cart = readCart();
-      var line = cart.find(function (l) { return l.slug === slug; });
-      if (line) {
-        line.quantity = (line.quantity || 0) + 1;
-      } else {
-        cart.push({ slug: slug, name: name, price: Number(price), image: image, quantity: 1 });
-      }
-      writeCart(cart);
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
     }
+
+    function render(products) {
+      loadingEl.classList.add("hidden");
+      errorEl.classList.add("hidden");
+      gridEl.classList.remove("hidden");
+      gridEl.innerHTML = "";
+      products.forEach(function (p) {
+        var image = (p.image || "").replace("/assets/brand", "/brand");
+        var weight = p.weightLabel ? p.weightLabel + ", " : "";
+        var price = p.priceFormatted || "";
+        var li = document.createElement("li");
+        li.className = "card-border bg-cream-100 flex flex-col";
+        li.innerHTML =
+          '<a href="/cake/' + encodeURIComponent(p.slug) + '" class="no-underline">' +
+            '<img src="' + escapeHtml(image) + '" alt="' + escapeHtml(p.name) + '" width="400" height="280" class="w-full h-44 object-cover" loading="lazy" />' +
+          '</a>' +
+          '<div class="p-5 flex flex-col flex-1">' +
+            '<p class="cake-name-label text-happy-blue-700 mb-1">' + escapeHtml(p.category || "") + '</p>' +
+            '<h3 class="font-display text-lg font-semibold text-happy-blue-900 mb-2 leading-snug">' +
+              '<a href="/cake/' + encodeURIComponent(p.slug) + '" class="text-happy-blue-900 hover:text-happy-blue-700 no-underline">' +
+                escapeHtml(p.name) +
+              '</a>' +
+            '</h3>' +
+            '<p class="text-sm text-text-primary mb-3 leading-relaxed flex-1">' + escapeHtml(p.description || "") + '</p>' +
+            '<p class="font-body font-medium text-sm text-happy-blue-900 mb-4">' + escapeHtml(weight + price) + '</p>' +
+            '<button type="button" class="add-to-cart btn-primary w-full"' +
+              ' data-slug="' + escapeHtml(p.slug) + '"' +
+              ' data-name="' + escapeHtml(p.name) + '"' +
+              ' data-price="' + escapeHtml(String(p.priceUsd || 0)) + '"' +
+              ' data-image="' + escapeHtml(image) + '"' +
+            '>Add to cart</button>' +
+          '</div>';
+        gridEl.appendChild(li);
+      });
+    }
+
+    fetch(apiBase + "/api/catalog", { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(String(r.status))); })
+      .then(function (data) {
+        var products = (data && data.products) || [];
+        if (data && data.kitchen && data.kitchen.overCapacity) {
+          capacityEl.classList.remove("hidden");
+        }
+        if (products.length === 0) {
+          loadingEl.classList.add("hidden");
+          errorEl.classList.remove("hidden");
+          return;
+        }
+        render(products);
+      })
+      .catch(function () {
+        loadingEl.classList.add("hidden");
+        errorEl.classList.remove("hidden");
+      });
 
     document.addEventListener("click", function (event) {
       var target = event.target;
@@ -124,12 +134,20 @@ const overCapacity = catalog?.kitchen?.overCapacity ?? false;
       event.preventDefault();
       var slug = target.dataset.slug;
       if (!slug) return;
-      addToCart(
-        slug,
-        target.dataset.name || slug,
-        target.dataset.price || "0",
-        target.dataset.image || ""
-      );
+      var cart = readCart();
+      var line = cart.find(function (l) { return l.slug === slug; });
+      if (line) {
+        line.quantity = (line.quantity || 0) + 1;
+      } else {
+        cart.push({
+          slug: slug,
+          name: target.dataset.name || slug,
+          price: Number(target.dataset.price || "0"),
+          image: target.dataset.image || "",
+          quantity: 1,
+        });
+      }
+      writeCart(cart);
       var original = target.textContent;
       target.textContent = "Added ✓";
       target.disabled = true;

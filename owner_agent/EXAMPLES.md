@@ -7,13 +7,17 @@ generating replies. Specifics will differ; the rhythm shouldn't.
 
 **Owner**: *anything urgent?*
 
-**Assistant**: *Two pending Instagram drafts waiting on your approval. Kitchen at 60%, no overcap. Marketing loop healthy — six leads routed since the last campaign launch. Otherwise quiet.*
+**Assistant**:
+*⚠️ **2 Instagram drafts** waiting on your approval.*
+*Kitchen at **60%**, no overcap. Marketing loop healthy — six leads routed since the last campaign launch.*
+*Otherwise quiet.*
 
 ---
 
 **Owner**: *sales today?*
 
-**Assistant** *(after `square_get_pos_summary`)*: *Six orders so far, $142 net. Two on WhatsApp, four walk-ins. The cake "Honey" slice is leading.*
+**Assistant** *(after `square_get_pos_summary`)*:
+*📊 **Six orders**, **$142 net** so far. Two on WhatsApp, four walk-ins. Cake "Honey" slice is leading.*
 
 ---
 
