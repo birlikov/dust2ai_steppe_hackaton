@@ -152,7 +152,18 @@ Manual gates before each phase exit: live system runs the relevant flow without 
 ## Status
 
 - **Today is May 9, 2026 (kickoff day).** Brief unsealed; team token in hand.
-- **Last completed**: **Phase 2 — Build (runtime layer + storefront + owner controls).**
+- **Last completed**: **Phase 3 — Integration (scripts + marketing plan + demo).**
+  - `docs/MARKETING_PLAN.md` — $500/month plan across 5 channels (Meta Ads, Google Ads, boosted IG, GB / discovery, repeat / follow-up) with margin / AOV / conversion math + Sugar Land context. Backed by the executable mirror `scripts/seed_marketing.py`.
+  - `scripts/run_scenario.py` — opens MCP, calls `world_start_scenario("launch-day-revenue-engine")`, drives `WorldPoller` while periodically calling `world_advance_time` to skip simulator time, then self-grades via the five `evaluator_score_*` tools and `evaluator_get_evidence_summary`. Writes `data/scorecard_<timestamp>.json`.
+  - `scripts/seed_marketing.py` — runs the closed loop: budget read → 2 campaigns (Mother's Day Meta + local-search Google) → launch → leads → route each lead → adjust → metrics → owner report. **Smoke-tested live**: 2 campaigns, 6 leads, ~62 audit calls, all MCP tools 200 OK.
+  - `scripts/seed_review_replies.py` — reads `gb_list_reviews`, asks the bridge for a brand-voice reply per review, posts via `gb_simulate_reply`. **Smoke-tested live**: 4/4 reviews replied (incl. the negative `rev_003`).
+  - `scripts/seed_drafts.py` — generates one IG post per brandbook content group (Product / Audience / Company), schedules each via `instagram_schedule_post`, persists locally so `/drafts` Telegram command can list / approve them.
+  - `scripts/demo.sh` — single-shot end-to-end orchestrator: starts uvicorn → runs all four seed scripts → drives the world scenario → calls `evaluator_generate_team_report` → saves to `data/team_report.json`. The submission demo target.
+  - `docs/DEMO.md` — operator runbook from clean clone to artefacts.
+  - Backend kept clean: ruff clean, mypy --strict clean, **103 pytests green**.
+- **Phase 2 (prior)**: runtime layer (retry, voice linter, drafts table, orchestrator), storefront API (`/api/catalog`, `/api/policies`, `/api/chat`, `/api/lead`), world poller, owner Telegram commands (`/dashboard`, `/budget`, `/drafts`), Astro storefront (8 routes + JSON-LD + chat widget). Commit `2dfbe13`.
+
+
   - Web/backend API contract locked at `docs/CONTRACTS.md`.
   - **Backend**: `src/core/retry.py` (exponential backoff + jitter), `src/core/voice.py` (brand-voice linter covering brand.r1..r10), `src/mcp/http_client.py` (HTTPS+JSON-RPC client for the happycake server with envelope unwrap + retry wrapper), `src/storage/drafts.py` + migration `002_drafts.sql` (drafts queue, owner identity, leads table), `src/workflows/orchestrator.py` (channel-agnostic per-turn orchestrator wrapping the bridge with audit + voice-lint).
   - **World engine**: `src/world/poller.py` (event polling loop) with channel-specific dispatchers for `whatsapp`, `instagram_dm`, `instagram_comment`. Events drive the orchestrator and reply via `whatsapp_send` / `instagram_send_dm` / `instagram_reply_to_comment`.
@@ -160,7 +171,7 @@ Manual gates before each phase exit: live system runs the relevant flow without 
   - **Owner Telegram bot**: `/dashboard` (POS + kitchen + evaluator summaries), `/budget` (marketing budget + recent leads), `/drafts` (lists pending with Approve / Edit / Reject inline keyboard; Approve triggers `instagram_approve_post` + `instagram_publish_post` for IG drafts). `/start` captures the owner's chat id idempotently. `BOT_COMMANDS` extended; menu re-synced.
   - **Website (`web/`)**: Astro + Tailwind, 8 pages (`/`, `/cake/[slug]`, `/about`, `/policies`, `/order`, `/custom`, `/guides/cake-for-x-guests`, `/sitemap.xml`), `/catalog.json`, `/robots.txt`, JSON-LD Product+Offer on every product page, vanilla-JS chat widget posting to `/api/chat`. Brandbook palette + Cormorant Garamond + Inter. `npm run build` exits 0; `tsc --noEmit` clean. Asset pack copied from `assets/brand/` to `web/public/brand/` at build time. Fallback catalog so the build succeeds even when the backend is offline.
   - **Tests**: 7 new test modules (retry, voice, drafts, orchestrator, storefront, world_poller, webhook_routes) — 58 new test cases. Quality gate: ruff clean, mypy --strict clean, **103 pytests green**.
-- **Next**: Phase 3 — Integration (drive `world_start_scenario` end-to-end through every channel; self-grade via `evaluator_score_world_scenario`; fix breakages). Then Phase 4 — Critic + polish. Then Phase 5 — Submission.
-- **Background processes**: nothing running. To start Phase 3: `uv run python -m src.bot.app` (bot polling, requires `claude` on PATH), `uv run uvicorn src.webhooks.app:app --reload --port 8000` (storefront API), `cd web && npm run dev` (Astro dev server on :4321), `./scripts/start_tunnel.sh` (ngrok for inbound webhooks).
+- **Next**: Phase 4 — Critic sweep (4 rubrics: code-review, agent-friendliness, operator-ux, business-analyst) + brand-voice polish on committed copy. Then Phase 5 — Submission (`ARCHITECTURE.md`, README final pass, repo public, submit).
+- **Background processes**: nothing running. To bring it up, see `docs/DEMO.md` §3.
 
 This file gets updated by every Phase exit and at every commit boundary.
