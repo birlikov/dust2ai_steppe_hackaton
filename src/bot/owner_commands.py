@@ -35,9 +35,12 @@ DRAFT_PREVIEW_MAX = 800
 @router.message(Command("dashboard"))
 async def cmd_dashboard(
     message: Message,
+    bot: Bot,
     session_id: str,
     mcp: HappycakeMcpClient,
 ) -> None:
+    ack = await message.answer("📊 Fetching dashboard…")
+    await bot.send_chat_action(message.chat.id, "typing")
     parts: list[str] = ["📊 *HappyCake dashboard*"]
     parts.append(await _summary_block("Sales (POS)", mcp, "square_get_pos_summary"))
     parts.append(
@@ -50,17 +53,19 @@ async def cmd_dashboard(
             "Evaluator evidence", mcp, "evaluator_get_evidence_summary"
         )
     )
-    text = "\n\n".join(parts)
-    await message.answer(text, parse_mode="Markdown")
+    await ack.edit_text("\n\n".join(parts), parse_mode="Markdown")
     await record("agent", "outbound", {"text": "dashboard"}, session_id=session_id)
 
 
 @router.message(Command("budget"))
 async def cmd_budget(
     message: Message,
+    bot: Bot,
     session_id: str,
     mcp: HappycakeMcpClient,
 ) -> None:
+    ack = await message.answer("💰 Fetching budget…")
+    await bot.send_chat_action(message.chat.id, "typing")
     blocks = ["💰 *Marketing budget*"]
     blocks.append(await _summary_block("Budget envelope", mcp, "marketing_get_budget"))
     blocks.append(
@@ -76,12 +81,13 @@ async def cmd_budget(
             for lead in leads
         )
         blocks.append("*Recent website leads*\n" + recent)
-    await message.answer("\n\n".join(blocks), parse_mode="Markdown")
+    await ack.edit_text("\n\n".join(blocks), parse_mode="Markdown")
     await record("agent", "outbound", {"text": "budget"}, session_id=session_id)
 
 
 @router.message(Command("drafts"))
-async def cmd_drafts(message: Message, session_id: str) -> None:
+async def cmd_drafts(message: Message, bot: Bot, session_id: str) -> None:
+    await bot.send_chat_action(message.chat.id, "typing")
     pending = await drafts.list_status("pending")
     if not pending:
         await message.answer("No drafts pending. ✨")

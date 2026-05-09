@@ -142,10 +142,17 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
             if app.state.mcp_owns_client and app.state.mcp_client is not None:
                 await app.state.mcp_client.__aexit__(None, None, None)
 
+    # OpenAPI is left enabled for agent-friendliness — third-party agents can
+    # introspect /openapi.json + /docs to learn the storefront contract without
+    # reading docs/CONTRACTS.md.
     app = FastAPI(
-        title="hackaton-webhooks",
-        docs_url=None,
-        redoc_url=None,
+        title="HappyCake storefront API",
+        version="0.2.0",
+        description=(
+            "FastAPI backend for the HappyCake storefront and Meta-shaped "
+            "webhooks. See docs/CONTRACTS.md for the full request/response "
+            "shapes."
+        ),
         lifespan=lifespan,
     )
 

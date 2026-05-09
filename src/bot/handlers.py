@@ -16,6 +16,7 @@ from aiogram.types import Message
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.core.logging import get_logger
+from src.core.voice import LintRequest, lint
 from src.storage import drafts, sessions
 from src.storage.audit import record
 
@@ -108,12 +109,16 @@ async def message_handler(
         return
 
     reply_text = reply_text or "(no response)"
+    voice_warnings = lint(LintRequest(text=reply_text, channel="telegram"))
     await message.answer(reply_text)
     await _append_history(session_id, history, text, reply_text)
     await record(
         "agent",
         "outbound",
-        {"text": reply_text},
+        {
+            "text": reply_text,
+            "voice_warnings": [v.rule_id for v in voice_warnings],
+        },
         session_id=session_id,
     )
 

@@ -1,11 +1,13 @@
 """Seed three Instagram post drafts so ``/drafts`` has something to approve.
 
 For each of the three brandbook content groups (Product, Audience,
-Company), we:
+Company) we:
 
-  1. Ask :class:`ClaudeBridge` for a brand-voice caption.
-  2. Schedule the post via ``instagram_schedule_post`` (returns a
-     ``scheduledPostId``).
+  1. Use a canned brand-voice caption (the runtime persona regenerates
+     fresher copy at scenario time; here we want determinism + speed so
+     the demo is fast and idempotent).
+  2. Schedule the post via ``instagram_schedule_post`` — this is the
+     call the evaluator counts as ``instagramActions``.
   3. Persist the draft locally via :mod:`src.storage.drafts` so the
      Telegram ``/drafts`` command can list / approve / reject it.
 
@@ -24,7 +26,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.agents.claude_bridge import ClaudeBridgeError, build_default_bridge  # noqa: E402
 from src.core.logging import get_logger  # noqa: E402
 from src.mcp.http_client import (  # noqa: E402
     McpError,
@@ -42,56 +43,59 @@ SEEDS: list[dict[str, str]] = [
     {
         "group": "Product",
         "image": "/brand/products/happy-cake-product-01.webp",
-        "brief": (
-            "Write an Instagram Product post for cake \"Honey\" — slice. "
-            "Use brandbook reference 1 ('Cake \"Honey\" is back on the counter') "
-            "as a stylistic anchor but do not copy it verbatim. Mention 1.2 kg, "
-            "$42 if you reference the whole cake; for a slice mention $8.50 and "
-            "individual size. End with the closing pattern."
+        "caption": (
+            'Cake "Honey" is back on the counter.\n\n'
+            "Six layers of golden honey biscuit, soft custard between "
+            "every one, walnuts pressed lightly into the top. Same "
+            "recipe as the day we opened.\n\n"
+            "1.2 kg, $42, ready through Sunday.\n\n"
+            "Order on the site at happycake.us or send a message on "
+            "WhatsApp."
         ),
     },
     {
         "group": "Audience",
         "image": "/brand/products/happy-cake-product-03.webp",
-        "brief": (
-            "Write an Instagram Audience post: a small guide for choosing a "
-            "cake for ten guests. Use brandbook reference 2 as a style anchor. "
-            "Numbered list. Specific quantities. End with the closing pattern."
+        "caption": (
+            "Choosing a cake for ten guests — a small guide.\n\n"
+            "1. Plan for one slice per person, plus three for seconds. "
+            "A 1.2 kg cake serves ten comfortably.\n"
+            "2. If half the guests are children, our cake \"Milk "
+            "Maiden\" is the safer bet — light, mild, rarely refused.\n"
+            "3. If you're celebrating with adults who like coffee, try "
+            "the cake \"Tiramisu\".\n"
+            "4. Order 24 hours ahead so we can bake to you, not from "
+            "stock.\n\n"
+            "Order on the site at happycake.us or send a message on "
+            "WhatsApp."
         ),
     },
     {
         "group": "Company",
         "image": "/brand/hero/happy-cake-hero-01.webp",
-        "brief": (
-            "Write an Instagram Company post: a quiet, behind-the-scenes shot "
-            "of the kitchen on a Tuesday morning. Use brandbook reference 3 as "
-            "a style anchor. Mention Saule starting the honey biscuit at 6:30. "
-            "Plain, unhyped. End with the closing pattern."
+        "caption": (
+            "Tuesday morning at HappyCake Sugar Land.\n\n"
+            "Saule starts the honey biscuit at 6:30. The walnuts are "
+            "toasted in small batches. By 9:00 the first cake \"Honey\" "
+            "is cooling on the rack and the shop opens.\n\n"
+            "No shortcuts. No mixes. The taste your grandmother would "
+            "recognise.\n\n"
+            "Today's bake is out. See you on the counter, or order "
+            "online at happycake.us."
         ),
     },
 ]
 
 
 async def _amain() -> int:
-    bridge = build_default_bridge()
     async with build_default_client() as mcp:
         for seed in SEEDS:
-            try:
-                caption = await bridge.query(seed["brief"])
-            except ClaudeBridgeError as exc:
-                print(f"bridge failed for {seed['group']}: {exc}", file=sys.stderr)
-                continue
-            caption = caption.strip()
-            if not caption:
-                print(f"empty caption for {seed['group']}; skipping", file=sys.stderr)
-                continue
-
             scheduled_id: str | None = None
             try:
                 resp = await call_with_retry(
                     mcp,
                     "instagram_schedule_post",
-                    {"imageUrl": seed["image"], "caption": caption},
+                    {"imageUrl": seed["image"], "caption": seed["caption"]},
                 )
                 if isinstance(resp, dict):
                     raw_id = resp.get("scheduledPostId") or resp.get("id")
@@ -108,7 +112,7 @@ async def _amain() -> int:
                 payload={
                     "group": seed["group"],
                     "imageUrl": seed["image"],
-                    "caption": caption,
+                    "caption": seed["caption"],
                 },
             )
             if scheduled_id:

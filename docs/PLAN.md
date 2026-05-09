@@ -152,7 +152,21 @@ Manual gates before each phase exit: live system runs the relevant flow without 
 ## Status
 
 - **Today is May 9, 2026 (kickoff day).** Brief unsealed; team token in hand.
-- **Last completed**: **Phase 3 — Integration (scripts + marketing plan + demo).**
+- **Last completed**: **Phase 4 + 5 — Critic sweep, submission docs, evidence.**
+  - Critic subagent ran 4 rubrics → scorecard at `docs/critic_report.md` (Code 13 + Agent-Friendliness 13 + Operator-UX 13 + Business-Analyst 9 = **48/55**).
+  - Top 5 critic-flagged cheap fixes all applied:
+    1. `web/src/pages/catalog.json.ts` ships products fallback (was empty error envelope).
+    2. `/dashboard`, `/budget`, `/drafts` ack within 2 s with a "Fetching…" message and `send_chat_action("typing")`.
+    3. `agent/RULES.md` rule 7 reconciled — either `kitchen_get_capacity` or `kitchen_get_production_summary` satisfies the precondition; doc clarifies which to prefer per use case.
+    4. `docs/MARKETING_PLAN.md` section 4 documents marketing channels 3-5 as organic / non-paid (boosted IG via `seed_drafts.py`, GB via `seed_review_replies.py`, repeat via `WorldPoller` `whatsapp_send`).
+    5. `src/bot/handlers.py` Telegram free-text handler now runs the brand-voice linter on the reply and records `voice_warnings` in the audit log.
+  - Bonus polish: `/openapi.json` re-enabled for agent introspection; `web/public/agent.txt` lists the structured surfaces; `seed_drafts.py` switched to canned brandbook captions so the demo runs in seconds (was hanging on bridge calls).
+  - Phase 5 docs: `ARCHITECTURE.md` (12 sections) and `README.md` rewritten for the submission audience. `docs/SUBMISSION_EVIDENCE.md` captures the live evaluator snapshot.
+  - **Live evaluator snapshot** against the real `happycake` MCP: marketing loop **90/100**; world scenario 40/100 baseline; POS+kitchen and channel_response start at 0 (lift after a `run_scenario.py` pass). 80+ MCP audit calls in flight.
+  - Quality gate: ruff clean, mypy --strict clean, **103 pytests green**.
+- **Phase 3 (prior)**: marketing plan + 4 seed scripts (marketing, review-replies, drafts, world scenario runner) + `scripts/demo.sh` orchestrator + `docs/DEMO.md`. Smoke-tested live: 2 campaigns, 6 leads, 4 review replies, 3 IG drafts. Commit `1ec5a0f`.
+
+
   - `docs/MARKETING_PLAN.md` — $500/month plan across 5 channels (Meta Ads, Google Ads, boosted IG, GB / discovery, repeat / follow-up) with margin / AOV / conversion math + Sugar Land context. Backed by the executable mirror `scripts/seed_marketing.py`.
   - `scripts/run_scenario.py` — opens MCP, calls `world_start_scenario("launch-day-revenue-engine")`, drives `WorldPoller` while periodically calling `world_advance_time` to skip simulator time, then self-grades via the five `evaluator_score_*` tools and `evaluator_get_evidence_summary`. Writes `data/scorecard_<timestamp>.json`.
   - `scripts/seed_marketing.py` — runs the closed loop: budget read → 2 campaigns (Mother's Day Meta + local-search Google) → launch → leads → route each lead → adjust → metrics → owner report. **Smoke-tested live**: 2 campaigns, 6 leads, ~62 audit calls, all MCP tools 200 OK.

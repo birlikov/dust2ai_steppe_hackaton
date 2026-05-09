@@ -1,120 +1,106 @@
-# dust2ai — Steppe Business Club Hackathon
+# HappyCake AI — Steppe Business Club hackathon submission
 
-> 24h agentic-AI submission for the Steppe Business Club hackathon (May 9–10, 2026).
-> The Business Analyst evaluator (10 pts) reads this file. The placeholder sections
-> below are filled at H+22 once the four workflows have landed.
+> An AI-assisted sales and operations system for **HappyCake US** (Sugar
+> Land, TX cake business). Submission for the Steppe Business Club
+> *Agentic AI for Real Business* hackathon (May 9–10, 2026).
+>
+> **Repo**: public on submission. **Runtime model**: `claude-opus-4-7` via
+> the `claude` CLI (no Anthropic SDK in production). **MCP server**:
+> hosted by Steppe Business Club; 55 tools across 8 families.
 
-## Problem
+## What this submits
 
-_TBD at H+22 — the Business Analyst Critic fills this from `docs/specs.md` and
-the unsealed brief at `docs/brief.md`. State the actual operational gap the
-business has today, in 3 sentences max._
+Six outcomes drawn from brief §3, all wired to the same MCP-grounded
+runtime persona:
 
-## Solution
-
-_TBD — one paragraph mapping our four agentic workflows to the problem above._
-
-| Workflow | Problem it solves | Channel | Key tools used |
+| # | Outcome | Where it lives | Key tools |
 |---|---|---|---|
-| 1. _name_ | … | telegram / wa / ig | … |
-| 2. _name_ | … | … | … |
-| 3. _name_ | … | … | … |
-| 4. _name_ | … | … | … |
+| 1 | Website / storefront | `web/` (Astro + Tailwind, 8 routes) → `/api/catalog` | `square_list_catalog`, `kitchen_get_capacity` |
+| 2 | Agent-friendly site | JSON-LD `Product` + `Offer` per product page; `/catalog.json`, `/policies`, `/sitemap.xml`, `/robots.txt`; predictable URLs | (read-only artefacts) |
+| 3 | On-site assistant | Floating chat widget → `POST /api/chat` → orchestrator → `claude -p` (with MCP) | every relevant family |
+| 4 | WhatsApp | `WorldPoller` consumes `world_next_event` → orchestrator → `whatsapp_send`; orders create POS + kitchen tickets | `square_create_order`, `kitchen_create_ticket`, `whatsapp_send` |
+| 5 | Instagram | DMs + comments through the poller; feed posts go through the **drafts approval queue** in Telegram | `instagram_send_dm`, `instagram_reply_to_comment`, `instagram_schedule_post`, `instagram_approve_post`, `instagram_publish_post` |
+| 6 | $500 marketing plan | `docs/MARKETING_PLAN.md` (human plan) + `scripts/seed_marketing.py` (executable closed loop) | full `marketing_*` family + `evaluator_score_marketing_loop` |
 
-## How it works (architecture)
+The owner controls everything from one Telegram bot:
+`/dashboard`, `/budget`, `/drafts` (Approve / Edit / Reject inline
+keyboard), plus `/help`, `/start`, `/cancel`, `/restart`.
 
-```
-                  ┌────────────────────┐
-   Telegram  ────▶│  aiogram bot       │──┐
-                  │  (polling)         │  │
-                  └────────────────────┘  │
-                                          ▼
-   WhatsApp  ────▶┌────────────────────┐ ┌──────────────────┐
-   Instagram ────▶│  FastAPI webhook   │▶│  Anthropic agent │
-                  │  (signed POST)     │ │  loop (tool-use) │
-                  └────────────────────┘ └────────┬─────────┘
-                          ▲                       │
-                          │                       ▼
-                    ngrok tunnel         ┌──────────────────┐
-                                         │  MCP registry    │
-                                         │  (org + local)   │
-                                         └────────┬─────────┘
-                                                  │
-                                          ┌───────┴────────┐
-                                          ▼                ▼
-                                   Organizer MCP    SQLite (sessions,
-                                   servers + data   FSM, idempotency,
-                                                    audit log)
-```
+## Architecture in one paragraph
 
-- Tier-routed model selection: Haiku by default, promote to Sonnet/Opus on observed gaps
-- Prompt + tool-definition caching to keep cost down across the 24h + 6h eval window
-- All mutating tool calls accept idempotency keys
-- Full audit log of every inbound, tool call, tool result, outbound
+We run **two Claudes**. Dev Claude (this repo's CLAUDE.md) plans, codes,
+reviews. Runtime Claude — the customer-facing HappyCake assistant — has
+its system prompt composed from four small files under `agent/` (SOUL,
+RULES, TOOLS, EXAMPLES) and is invoked by `src/agents/claude_bridge.py`
+shelling out to `claude -p --system-prompt …` with `ANTHROPIC_MODEL=claude-opus-4-7`.
+The bridge inherits MCP plumbing from `.claude/settings.local.json`, so the
+runtime can call MCP tools directly. Every channel (Telegram, WhatsApp,
+Instagram, website chat, world events) routes through one
+`Orchestrator` that adds session history, brand-voice lint, and an
+audit-log entry. Full diagram in `ARCHITECTURE.md`.
 
-## User journey
-
-### Customer (WhatsApp / Instagram)
-_TBD — one walk-through per workflow, from first message to satisfied outcome._
-
-### Business owner (Telegram)
-_TBD — daily-driver flow: morning summary, exception handling, end-of-day._
-
-## Value (ROI)
-
-_TBD — quantified per workflow at H+22:_
-
-- _Workflow 1_: ~X hours/week saved, Y errors avoided per Z customers
-- _Workflow 2_: …
-- _Workflow 3_: …
-- _Workflow 4_: …
-
-## Limitations
-
-_TBD — honest list of what this 24h build does NOT do, e.g. multi-language,
-multi-tenant, real Meta integration (organizer-bridged), historical analytics
-beyond audit log, etc._
-
-## Run it
+## Run it from a clean clone
 
 ```bash
-# 1. install
-uv sync --dev
-cp config/.env.example .env  # then fill TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY, etc.
+git clone <this-repo> hackaton && cd hackaton
 
-# 2. tests
-uv run ruff check src tests
+# 1. Python deps
+uv sync
+
+# 2. tokens (Telegram bot + SBC team token; both required)
+cp config/.env.example .env
+# fill TELEGRAM_BOT_TOKEN and SBC_TEAM_TOKEN
+
+# 3. quality gate (clean)
+uv run ruff check src tests scripts examples
 uv run mypy src
-uv run pytest -q
+uv run pytest -q                 # 103 tests, ~5s
 
-# 3. run the bot (Telegram, polling)
-uv run python -m src.bot.app
+# 4. web build (offline-safe; uses fallback catalog if backend is down)
+cd web && npm install && npm run build && cd ..
 
-# 4. run the webhook receiver behind ngrok
-./scripts/start_tunnel.sh                # default port 8000
-
-# 5. run the scenario harness
-uv run python scripts/run_scenarios.py tests/scenarios/
+# 5. five-minute end-to-end demo against the live MCP
+./scripts/demo.sh
 ```
 
-## Repository layout
+The demo:
 
-| Path | What lives there |
+1. Starts the FastAPI storefront API on `:8000`.
+2. Runs the marketing loop end-to-end (2 campaigns + 6 leads + adjust + report).
+3. Replies to every seeded Google Business review.
+4. Generates 3 Instagram post drafts and queues them for `/drafts` approval.
+5. Drives the world-engine scenario with `WorldPoller` + periodic `world_advance_time`.
+6. Self-grades via the five `evaluator_score_*` tools and writes
+   `data/team_report.json`.
+
+The full operator runbook (manual / interactive flows, Telegram-side
+walkthroughs, troubleshooting) is in **`docs/DEMO.md`**.
+
+## Documentation
+
+| File | What's in it |
 |---|---|
-| `CLAUDE.md` | Project conventions for Claude Code + AI judges |
-| `.claude/agents/` | Subagent definitions (planner, coder, tester, critic, …) |
-| `src/agents/` | Anthropic tool-use loop, model tiering |
-| `src/bot/` | aiogram Telegram bot |
-| `src/webhooks/` | FastAPI inbound + signature verification |
-| `src/mcp/` | MCP server registry + namespaced tool dispatch |
-| `src/storage/` | SQLite sessions, FSM, idempotency, audit log |
-| `src/scenarios/` | Acceptance-test runner |
-| `src/workflows/` | One module per business workflow (filled at H+0) |
-| `tests/` | Unit + scenario tests |
-| `docs/` | brief, specs, mcp inventory, decisions, critic report |
-| `config/` | `.env.example`, `mcp.json`, SQL migrations |
+| `ARCHITECTURE.md` | Two-Claude pattern, MCP routing, owner controls, channel adapters, POS + kitchen handoff, marketing loop, agent-friendliness surfaces, storage model, layout |
+| `docs/PLAN.md` | Live execution plan + the locked architectural decisions (do not relitigate) |
+| `docs/specs.md` | Acceptance criteria for all 6 workflows (60 ACs, 24 edge cases, 12 cross-cutting brand rules) — produced by `brief-analyst` at H+0 |
+| `docs/mcp_inventory.md` | All 55 MCP tools across 8 families with schemas + sample success / failure shapes — produced by `mcp-recon` at H+0 |
+| `docs/CONTRACTS.md` | Web ↔ backend API contract (the storefront and the FastAPI app build to this) |
+| `docs/MARKETING_PLAN.md` | $500/month plan with margin / AOV / conversion math + Sugar Land context (executable form: `scripts/seed_marketing.py`) |
+| `docs/DEMO.md` | Operator runbook from clean clone to artefacts |
+| `docs/critic_report.md` | Phase 4 critic scorecard (4 rubrics: code review, agent friendliness, operator UX, business analyst) |
+| `docs/decisions.md` | ADR log |
+| `HCU_BRANDBOOK.md` | The brand book — voice, palette, hard rules; the runtime persona is derived from this |
+| `HACKATHON_BRIEF.md` | The unsealed brief, verbatim |
+| `agent/README.md` | Why the persona is split into 4 files and how the composer wires them together |
+
+## What's deliberately out of scope
+
+Per `ARCHITECTURE.md` §11: real Square / Meta / Google Ads credentials,
+multi-language copy, multi-tenant auth, LLM fine-tuning, microservices.
+Single process, single host, single tenant — that's the brief.
 
 ## License & IP
 
-Per the hackathon rules, submitted IP transfers to Steppe Business Club; this
-team retains a portfolio license. Repo remains public post-event.
+Per the hackathon rules, submitted IP transfers to Steppe Business Club;
+this team retains a portfolio license. The repo remains public after the
+event.

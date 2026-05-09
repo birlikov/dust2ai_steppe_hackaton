@@ -1,0 +1,19 @@
+# HappyCake — agent-friendliness pointers
+# This file lists the structured surfaces an autonomous AI agent should read
+# to shop the HappyCake catalog without scraping. Stable URLs only.
+#
+# Last reviewed: 2026-05-09
+
+site:        https://happycake.us
+catalog:     https://happycake.us/catalog.json
+policies:    https://happycake.us/api/policies   # JSON form (backend-served)
+sitemap:     https://happycake.us/sitemap.xml
+order_form:  https://happycake.us/order
+custom:      https://happycake.us/custom
+robots:      https://happycake.us/robots.txt
+
+# Per-product pages carry Schema.org Product + Offer JSON-LD inline.
+products:    https://happycake.us/cake/<slug>
+
+# Brand wordmark is HappyCake (one word, two capitals). Cake names are written
+# in quotes after the word "cake" — cake "Honey", cake "Napoleon".

@@ -36,10 +36,15 @@ These are pulled from `marketing_get_margin_by_product` +
 `marketing_get_sales_history` at plan boot. The numbers below reflect the
 seeded sandbox at the time of writing; the script reads them live.
 
-| Product | Price (USD) | Est. margin | Notes |
+> Margin column below is from the seeded sandbox snapshot of
+> `marketing_get_margin_by_product` (2026-05-09). The script reads it
+> live; if the live numbers move, the table here may lag — re-run
+> `scripts/seed_marketing.py` for the authoritative figures.
+
+| Product | Price (USD) | Est. margin (snapshot 2026-05-09) | Notes |
 |---|---|---|---|
 | Honey cake slice (`honey-cake-slice`) | 8.50 | **68%** | Highest margin per dollar of ad spend; impulse-buy friendly |
-| Pistachio roll (slice/roll) | (slices) 9.50 / (whole) 44 | 64–66% | Premium classic; pairs well with high-AOV upsell |
+| Pistachio roll (slice/roll) | (slices) 9.50 / (whole) 44 | 64-66% | Premium classic; pairs well with high-AOV upsell |
 | Whole honey cake | 55 | 62% | Best for celebrations; AOV anchor |
 | Office dessert box | 120 | 60% | Highest AOV; B2B angle |
 | Custom birthday cake | 95 | 58% | Gated through owner approval; not a paid-ads target |
@@ -97,6 +102,26 @@ cake mixes the actual lift will be higher).
    *Honey cake*.
 7. **Owner approves every paid creative** (brand.r6) — drafts go through
    the `/drafts` Telegram queue.
+
+### How the executable mirror covers each channel
+
+`scripts/seed_marketing.py` is the **paid-spend** half of the plan; it
+creates campaigns through `marketing_create_campaign` for **channels 1
+and 2** ($180 Meta + $120 Google). Channels 3–5 are organic / non-paid
+and run through different scripts:
+
+| Channel | Executor | Tools fired |
+|---|---|---|
+| 1 — Meta Ads | `scripts/seed_marketing.py` | `marketing_create_campaign` + `launch` + `generate_leads` + `route_lead` + `adjust_campaign` + `report_to_owner` |
+| 2 — Google Ads | `scripts/seed_marketing.py` | same as #1 |
+| 3 — Boosted IG posts | `scripts/seed_drafts.py` (drafts → owner approval → `instagram_publish_post`) | `instagram_schedule_post` → `instagram_approve_post` → `instagram_publish_post` |
+| 4 — GB / discovery | `scripts/seed_review_replies.py` (review-reply sweep) + future `gb_simulate_post` cadence | `gb_list_reviews` + `gb_simulate_reply` (per brandbook §5 "every review answered") |
+| 5 — Repeat / follow-up | runtime persona during `WorldPoller` runs (`whatsapp_send` to past customers when permission is on file) | `whatsapp_send` |
+
+The `evaluator_score_marketing_loop` rubric reads only the
+`marketing_*`-tool evidence, so channels 1 and 2 are what move that
+scorecard. Channels 3–5 contribute to `evaluator_score_channel_response`
+(WA + IG + GB) and to brand-voice / agent-friendliness scoring.
 
 ## 5. Attribution loop
 
