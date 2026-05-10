@@ -54,6 +54,59 @@ done
 mkdir -p data
 
 # ---------------------------------------------------------------------------
+# 0. Validate required tools on PATH
+# ---------------------------------------------------------------------------
+# Fail fast with copy-pasteable install hints rather than letting downstream
+# steps explode with cryptic errors. ngrok is soft — we auto-fall-back to
+# --no-ngrok mode if it's missing.
+
+command -v uv >/dev/null 2>&1 || {
+    cat <<'EOF' >&2
+✗ 'uv' not on PATH.
+
+Install with one of:
+    curl -LsSf https://astral.sh/uv/install.sh | sh   # recommended
+    pip install uv
+    brew install uv                                   # macOS
+
+Then re-run ./scripts/run.sh.
+EOF
+    exit 1
+}
+
+command -v claude >/dev/null 2>&1 || {
+    cat <<'EOF' >&2
+✗ 'claude' CLI not on PATH.
+
+The brief mandates Claude Code — the runtime persona shells out to
+`claude -p` using your Claude Max subscription. Install:
+    npm i -g @anthropic-ai/claude-code
+or see https://docs.anthropic.com/en/docs/claude-code
+
+Then re-run ./scripts/run.sh.
+EOF
+    exit 1
+}
+
+command -v npm >/dev/null 2>&1 || {
+    cat <<'EOF' >&2
+✗ 'npm' (Node 20+) not on PATH.
+
+The Astro storefront needs npm at build time. Install Node:
+    https://nodejs.org/   (or use nvm/fnm/asdf)
+
+Then re-run ./scripts/run.sh.
+EOF
+    exit 1
+}
+
+if [ "$WITH_NGROK" -eq 1 ] && ! command -v ngrok >/dev/null 2>&1; then
+    echo "[WARN] 'ngrok' not on PATH. Falling back to --no-ngrok (local :8000 only)." >&2
+    echo "       Install: https://ngrok.com/download   (free authtoken is fine)" >&2
+    WITH_NGROK=0
+fi
+
+# ---------------------------------------------------------------------------
 # 1. Validate .env
 # ---------------------------------------------------------------------------
 if [ ! -f .env ]; then
