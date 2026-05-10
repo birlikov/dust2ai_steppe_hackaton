@@ -171,7 +171,10 @@ visibility, and approvals. Commands:
 | `/budget` | `cmd_budget` — `marketing_get_budget` + `marketing_get_campaign_metrics` + recent leads from SQLite | Marketing $500 visibility |
 | `/inbox` | `cmd_inbox` (alias `/drafts`) — lists pending **marketing drafts** with **Approve / Edit / Reject** inline keyboard. Customer orders are auto-confirmed and not queued here. Approve drives `instagram_approve_post` + `instagram_publish_post` for IG drafts | Brandbook §7 approval gate |
 | `/notify` | `cmd_notify` — sets the proactive-update cadence per owner. Plain `/notify` sends an inline keyboard (1 min / 30 min / 2 h / Off / Default; current pick ✓-marked); `cb_notify` updates the persisted value and edits the message in place when a button is tapped. Text args (`/notify 30m`, `/notify off`, etc.) still work for back-compat. Persists to `owner_identity.notifier_interval_s`; `notifier.py` reads the per-owner value each tick and falls back to env default when NULL. | Operator-tuneable cadence; respects "don't ping me too often" |
+| `/refund` | `cmd_refund` — bare `/refund` lists the last 10 orders as an inline-button picker; tapping a row drafts a refund offer (`kind=refund_offer`) into `/inbox`. Approve drives `square_update_order_status(status="cancelled")` with the refund note. | Tap-to-pick UX; closed-loop refund flow |
+| `/drain_threads` | `cmd_drain_threads` — drains unanswered WhatsApp + Instagram threads through the customer persona. Catches up on backlog accumulated while the bot was offline. | Channel resilience |
 | `/cancel`, `/restart` | clear FSM, message ack | Operator UX safety |
+| `/logout` | unpair this chat from `owner_identity` | Operator UX safety |
 | free text | message handler injects `bridge: ClaudeBridge`; orchestrator runs the same path as customer channels. Replies go through `tg_normalise()` (`src/bot/markdown.py`) which converts CommonMark `**bold**` → Telegram-classic `*bold*` so the persona's bolds actually render | Persona smoke / debug |
 
 FSM state persists in `data/state.db` (`fsm_state` table) so a process
@@ -191,6 +194,8 @@ restart doesn't lose mid-flow context. Every inbound message goes through
 | Google Business posts | (Phase 4+) | `gb_simulate_post` | required (treat like IG posts) |
 | Lead form | `POST /api/lead` from Astro storefront | persists to `leads` SQLite + best-effort `marketing_report_to_owner` | none — leads always captured |
 
+Meta webhook registration (`whatsapp_register_webhook` + `instagram_register_webhook`) happens automatically in `scripts/run.sh` step 8.5, after ngrok comes up. The owner does not need to wire them manually.
+
 ## 6. POS + kitchen handoff
 
 Order flow (when the runtime persona accepts an order in chat):
@@ -199,7 +204,7 @@ Order flow (when the runtime persona accepts an order in chat):
 2. Runtime calls `kitchen_get_capacity` (and where product-specific timing matters, `kitchen_get_menu_constraints`) — this is the **kitchen-capacity precondition** in `agent/RULES.md` rule 7.
 3. Runtime calls `square_create_order` with `items[{variationId, quantity}]`, `source` (`whatsapp` | `instagram` | `website` | `walk-in` | `agent`), and `customerName`. Returns `orderId`.
 4. Runtime calls `kitchen_create_ticket` with `orderId`, `customerName`, `items[{productId, quantity}]` — **`productId` ≠ `variationId`** (mapping via `kitchenProductId` in catalog).
-5. Kitchen-side flow: in production this is the kitchen staff. For the demo, an opt-in `KitchenRunner` (`src/world/kitchen_runner.py`, gated by `KITCHEN_AUTO_DEMO=true`) closes the loop automatically — polls `kitchen_list_tickets`, calls `kitchen_accept_ticket` (or `kitchen_reject_ticket` when remaining capacity is tight), and `kitchen_mark_ready` once the nominal lead time has elapsed.
+5. Kitchen-side flow: in production this is the kitchen staff. For the demo, a `KitchenRunner` (`src/world/kitchen_runner.py`) closes the loop automatically — polls `kitchen_list_tickets`, calls `kitchen_accept_ticket` (or `kitchen_reject_ticket` when remaining capacity is tight), and `kitchen_mark_ready` once the nominal lead time has elapsed. **Default-on** (`KITCHEN_AUTO_DEMO=true`); flip to `false` if running `scripts/run_scenario.py` against the same team token to avoid double-acceptance.
 6. **Owner notification (best-effort):** after step 4 succeeds (or `kitchen_pending` when step 4 fails) `_notify_owner_of_order` in `src/webhooks/app.py` opens a one-shot aiogram `Bot`, looks up the paired owner in `owner_identity`, and sends a one-line summary with channel-aware emoji (`📦 website`, `💬 whatsapp`, `📸 instagram`, `🤖 agent`, `🚶 walk-in`), brand-correct cake names, total, and pickup/delivery time. Failures log a warning and never block the customer order.
 
 The runtime never short-circuits step 2. The brand-voice linter

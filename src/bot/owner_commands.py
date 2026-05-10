@@ -21,7 +21,13 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
-from src.bot.keyboards import draft_keyboard, parse_draft_callback
+from src.bot.drain import already_answered, extract_threads, latest_customer_message
+from src.bot.keyboards import (
+    draft_keyboard,
+    parse_draft_callback,
+    parse_refund_callback,
+    refund_picker_keyboard,
+)
 from src.bot.markdown import tg_normalise
 from src.core.logging import get_logger
 from src.mcp.http_client import (
@@ -32,6 +38,7 @@ from src.mcp.http_client import (
 )
 from src.storage import drafts, sessions
 from src.storage.audit import record
+from src.workflows.orchestrator import Orchestrator, TurnRequest
 
 log = get_logger(__name__)
 router = Router(name="owner_commands")
@@ -60,6 +67,7 @@ async def cmd_dashboard(
         kitchen_tickets,
         evidence,
         gb_metrics,
+        gb_reviews,
         wa_threads,
         ig_threads,
         sales_history,
@@ -71,6 +79,7 @@ async def cmd_dashboard(
         _safe_call(mcp, "kitchen_list_tickets"),
         _safe_call(mcp, "evaluator_get_evidence_summary"),
         _safe_call(mcp, "gb_get_metrics"),
+        _safe_call(mcp, "gb_list_reviews"),
         _safe_call(mcp, "whatsapp_list_threads"),
         _safe_call(mcp, "instagram_list_dm_threads"),
         _safe_call(mcp, "marketing_get_sales_history"),
@@ -84,6 +93,7 @@ async def cmd_dashboard(
         "kitchen_tickets": kitchen_tickets,
         "evidence": evidence,
         "gb_metrics": gb_metrics,
+        "reviews": gb_reviews,
         "live_threads": {
             "whatsapp": wa_threads,
             "instagram": ig_threads,
@@ -99,7 +109,8 @@ async def cmd_dashboard(
             "five-bullet brief covering: today's sales (orders + revenue + "
             "channel mix), kitchen tickets in flight + production headroom, "
             "live conversations (WA/IG thread counts), Google Business "
-            "review pulse (count + avg rating + response rate), and drafts "
+            "review pulse (total review count + avg star rating + response "
+            "rate + the most recent 1-2 review highlights), and drafts "
             "pending his approval. Lead with the urgent item if any. English, "
             "plain prose, no JSON, no code blocks."
         ),
@@ -225,7 +236,7 @@ async def cmd_inbox(message: Message, bot: Bot, session_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /refund <order_id> — owner-initiated refund flow with approval gate
+# /refund — two-step inline-keyboard refund flow with power-user text path
 # ---------------------------------------------------------------------------
 
 
@@ -237,34 +248,31 @@ async def cmd_refund(
     owner_bridge: ClaudeBridge,
     mcp: HappycakeMcpClient,
 ) -> None:
-    """``/refund <order_id> [reason …]`` — queue a refund offer in /inbox.
+    """``/refund`` — show an order picker, or ``/refund <order_id> [reason]``.
 
-    Looks up the order via ``square_recent_orders``, asks the owner-bridge
-    to draft a brand-voice apology + refund line, and writes a
-    ``refund_offer`` draft. On Approve in ``/inbox`` we call
-    ``square_update_order_status`` with ``cancelled`` + a refund note.
+    **Bare** ``/refund``: fetches the 10 most recent orders and shows an
+    inline keyboard so the owner taps to pick. The callback
+    ``refund:pick:<order_id>`` then runs the draft-creation flow.
+
+    **With args** ``/refund <order_id> [reason]``: power-user / script path.
+    Both paths converge on :func:`_create_refund_draft`.
     """
     text = (message.text or "").strip()
     parts = text.split(maxsplit=2)
-    expected_min_parts = 2
-    expected_with_reason = 3
-    if len(parts) < expected_min_parts:
-        await message.answer(
-            "Usage: `/refund <order_id> [reason]`\n"
-            "Example: `/refund sq_order_1778… overcharged for the slice`",
-            parse_mode="Markdown",
-        )
+    # Bare /refund → show picker.
+    if len(parts) < 2:  # noqa: PLR2004
+        await _show_refund_picker(message, bot, mcp)
         return
+
+    # Power-user path: /refund <order_id> [reason]
     order_id = parts[1].strip()
-    reason = parts[2].strip() if len(parts) >= expected_with_reason else ""
+    reason = parts[2].strip() if len(parts) >= 3 else ""  # noqa: PLR2004
 
     ack = await message.answer(
         f"💸 Drafting a refund offer for `{order_id}`…",
         parse_mode="Markdown",
     )
     await bot.send_chat_action(message.chat.id, "typing")
-
-    # Pull the order so the persona has real numbers to reference.
     order = await _lookup_order(mcp, order_id)
     if order is None:
         await _safe_edit(
@@ -273,7 +281,109 @@ async def cmd_refund(
             f"Double-check the id from /dashboard or square_recent_orders.",
         )
         return
+    await _create_refund_draft(
+        message, ack, bot, session_id, owner_bridge, mcp, order_id, reason, order
+    )
 
+
+async def _show_refund_picker(
+    message: Message,
+    bot: Bot,
+    mcp: HappycakeMcpClient,
+) -> None:
+    """Fetch recent orders and present an inline keyboard for the owner to pick."""
+    await bot.send_chat_action(message.chat.id, "typing")
+    try:
+        result = await call_with_retry(mcp, "square_recent_orders", {"limit": 10})
+    except (McpTransportError, McpError) as exc:
+        log.warning("refund.picker_failed", err=str(exc))
+        await message.answer("❌ Couldn't reach Square — try again in a moment.")
+        return
+
+    order_list: list[dict[str, Any]] = []
+    if isinstance(result, dict):
+        raw = result.get("orders")
+        if isinstance(raw, list):
+            order_list = [o for o in raw if isinstance(o, dict)]
+
+    if not order_list:
+        await message.answer(
+            "No recent orders to refund — last 10 are empty."
+        )
+        return
+
+    try:
+        await message.answer(
+            "🧾 *Pick an order to refund:*",
+            reply_markup=refund_picker_keyboard(order_list),
+            parse_mode="Markdown",
+        )
+    except Exception as exc:
+        log.warning("refund.picker_markdown_failed", err=str(exc))
+        await message.answer(
+            "Pick an order to refund:",
+            reply_markup=refund_picker_keyboard(order_list),
+        )
+
+
+@router.callback_query(lambda c: (c.data or "").startswith("refund:pick:"))
+async def cb_refund_pick(
+    callback: CallbackQuery,
+    bot: Bot,
+    session_id: str,
+    owner_bridge: ClaudeBridge,
+    mcp: HappycakeMcpClient,
+) -> None:
+    """Handle a tap on the refund order picker."""
+    data = callback.data or ""
+    try:
+        order_id = parse_refund_callback(data)
+    except ValueError:
+        await callback.answer("Stale or malformed button — send /refund again.")
+        return
+
+    await callback.answer("Looking up order…")
+    # We need the original message to reply to. Fall back to answering the
+    # callback's message if it's accessible, or a new message otherwise.
+    msg = callback.message
+    if msg is None:
+        return
+    if isinstance(msg, InaccessibleMessage):
+        # Can't edit; this is a degenerate edge case. Silently skip.
+        return
+    reply_target: Message = msg
+
+    await bot.send_chat_action(reply_target.chat.id, "typing")
+    order = await _lookup_order(mcp, order_id)
+    if order is None:
+        await reply_target.answer(
+            f"❌ Order `{order_id}` not found — it may have been removed.",
+            parse_mode="Markdown",
+        )
+        return
+
+    ack = await reply_target.answer(
+        f"💸 Drafting a refund offer for `{order_id}`…",
+        parse_mode="Markdown",
+    )
+    await _create_refund_draft(
+        reply_target, ack, bot, session_id, owner_bridge, mcp, order_id, "", order
+    )
+
+
+async def _create_refund_draft(
+    message: Message,
+    ack: Message,
+    bot: Bot,
+    session_id: str,
+    owner_bridge: ClaudeBridge,
+    mcp: HappycakeMcpClient,
+    order_id: str,
+    reason: str,
+    order: dict[str, Any],
+) -> None:
+    """Shared final step: draft the apology copy and queue a refund_offer draft."""
+    await bot.send_chat_action(message.chat.id, "typing")
     payload_for_bridge: dict[str, Any] = {
         "order": order,
         "owner_reason": reason or "(none provided)",
@@ -345,7 +455,7 @@ async def _lookup_order(
     except (McpTransportError, McpError) as exc:
         log.warning("refund.lookup_failed", err=str(exc))
         return None
-    orders = []
+    orders: list[dict[str, Any]] = []
     if isinstance(result, dict):
         raw = result.get("orders")
         if isinstance(raw, list):
@@ -357,53 +467,108 @@ async def _lookup_order(
 
 
 # ---------------------------------------------------------------------------
-# /wire-webhooks — register Meta WhatsApp + Instagram webhooks at the
-# current ngrok URL. One-shot helper; rarely needed in dev (we drive
-# events through world_next_event), useful when an evaluator wants to
-# wire a real Meta sandbox to the running tunnel.
+# /drain_threads — reply to every unanswered WA + IG thread via the persona
 # ---------------------------------------------------------------------------
 
 
-@router.message(Command("wire_webhooks"))
-async def cmd_wire_webhooks(
+@router.message(Command("drain_threads"))
+async def cmd_drain_threads(
     message: Message,
     bot: Bot,
     session_id: str,
+    bridge: ClaudeBridge,
     mcp: HappycakeMcpClient,
 ) -> None:
-    """``/wire_webhooks <https://your-tunnel/webhook/whatsapp>`` — register
-    the Meta-shaped webhook URL with the simulator so injected
-    WhatsApp + Instagram events round-trip through the storefront.
+    """``/drain_threads`` — reply to every unanswered WA + IG thread via the persona.
+
+    Fetches open threads from WhatsApp and Instagram in parallel, deduplicates
+    against the audit log (skips any thread already answered by the agent
+    within the last ``_DRAIN_DEDUP_WINDOW_H`` hours), runs each through the
+    orchestrator, and sends the reply via the matching outbound MCP tool.
+    Summarises the results to the owner.
+
+    Note: uses the **customer-facing** ``bridge`` (not ``owner_bridge``)
+    so drained replies sound like the cashier persona to the customer,
+    not the ops summariser to the owner.
     """
-    text = (message.text or "").strip()
-    parts = text.split(maxsplit=1)
-    expected_min_parts = 2
-    if len(parts) < expected_min_parts or not parts[1].startswith("https://"):
-        await message.answer(
-            "Usage: `/wire_webhooks <https://…ngrok…/webhook/whatsapp>`\n"
-            "I'll derive the matching `/webhook/instagram` URL from it.",
-            parse_mode="Markdown",
-        )
-        return
-    wa_url = parts[1].strip().rstrip("/")
-    ig_url = wa_url.replace("/webhook/whatsapp", "/webhook/instagram")
-    ack = await message.answer("🔗 Registering webhooks with the simulator…")
-    results: list[str] = []
-    for tool, url in (
-        ("whatsapp_register_webhook", wa_url),
-        ("instagram_register_webhook", ig_url),
-    ):
+    ack = await message.answer("🧹 Draining unanswered threads…")
+    await bot.send_chat_action(message.chat.id, "typing")
+
+    wa_result, ig_result = await asyncio.gather(
+        _safe_call(mcp, "whatsapp_list_threads"),
+        _safe_call(mcp, "instagram_list_dm_threads"),
+        return_exceptions=False,
+    )
+
+    wa_threads = extract_threads(wa_result)
+    ig_threads = extract_threads(ig_result)
+
+    orchestrator = Orchestrator(bridge=bridge, mcp=mcp)
+
+    wa_sent = 0
+    ig_sent = 0
+    skipped = 0
+
+    for thread in wa_threads:
+        user_msg = latest_customer_message(thread)
+        thread_id = str(thread.get("id") or thread.get("threadId") or "")
+        if not user_msg or not thread_id:
+            skipped += 1
+            continue
+        if await already_answered(thread_id):
+            skipped += 1
+            continue
         try:
-            await call_with_retry(mcp, tool, {"url": url})
-            results.append(f"✓ {tool} → {url}")
-        except (McpTransportError, McpError) as exc:
-            results.append(f"✗ {tool}: {exc}")
-            log.warning("wire_webhooks.failed", tool=tool, err=str(exc))
-    await _safe_edit(ack, "\n".join(results))
+            turn = await orchestrator.run(
+                TurnRequest(
+                    channel="whatsapp",
+                    external_id=thread_id,
+                    user_message=user_msg,
+                )
+            )
+            await call_with_retry(
+                mcp,
+                "whatsapp_send",
+                {"to": thread_id, "body": turn.reply},
+            )
+            wa_sent += 1
+        except Exception as exc:
+            log.warning("drain.wa_send_failed", thread_id=thread_id, err=str(exc))
+            skipped += 1
+
+    for thread in ig_threads:
+        user_msg = latest_customer_message(thread)
+        thread_id = str(thread.get("id") or thread.get("threadId") or "")
+        if not user_msg or not thread_id:
+            skipped += 1
+            continue
+        if await already_answered(thread_id):
+            skipped += 1
+            continue
+        try:
+            turn = await orchestrator.run(
+                TurnRequest(
+                    channel="instagram",
+                    external_id=thread_id,
+                    user_message=user_msg,
+                )
+            )
+            await call_with_retry(
+                mcp,
+                "instagram_send_dm",
+                {"to": thread_id, "body": turn.reply},
+            )
+            ig_sent += 1
+        except Exception as exc:
+            log.warning("drain.ig_send_failed", thread_id=thread_id, err=str(exc))
+            skipped += 1
+
+    summary = f"Drained {wa_sent} WA + {ig_sent} IG threads. Skipped {skipped} already-answered."
+    await _safe_edit(ack, summary)
     await record(
         "agent",
         "outbound",
-        {"text": "wire_webhooks", "wa_url": wa_url, "ig_url": ig_url},
+        {"text": "drain_threads", "wa_sent": wa_sent, "ig_sent": ig_sent, "skipped": skipped},
         session_id=session_id,
     )
 

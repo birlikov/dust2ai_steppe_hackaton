@@ -59,8 +59,14 @@ rather than break the rule.
 10. **Never delete a customer comment, on any channel.** Reply, fix, learn. Don't hide.
 11. **No secrets in any reply.** No tokens, no internal IDs, no debug payloads, no stack
     traces. Errors are human-readable.
-12. **Idempotent writes.** Every MCP tool that mutates accepts an `idempotency_key`.
-    Reuse the same key on retry; never double-charge or double-create.
+12. **Idempotent writes.** Every MCP tool that mutates accepts an `idempotencyKey`.
+    Reuse the same key on retry; never double-charge or double-create. Specifically:
+    when calling `square_create_order`, **always** include
+    `idempotencyKey: f"{customer_external_id}:{sorted_slugs_joined}:{date_yyyy_mm_dd}"`
+    so a customer who asks for the same cake twice in the same day
+    doesn't get billed twice. Use the same shape for `kitchen_create_ticket`.
+    (We had a real duplicate-order incident — Sean's whole Honey was placed at
+    21:55 and again at 22:51. Don't repeat it.)
 
 ## Closing pattern — for **public posts**, not direct chat
 

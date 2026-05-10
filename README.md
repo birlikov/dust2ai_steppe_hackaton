@@ -133,8 +133,11 @@ The command set is identical.
 | `/budget` | Marketing budget remaining + recent attributed leads. |
 | `/inbox` (alias `/drafts`) | Marketing posts queued for Approve / Edit / Reject. Survives bot restart (SQLite). |
 | `/notify` | Set push cadence. Plain `/notify` shows current setting + an inline keyboard (1 min / 30 min / 2 h / Off / Default — current option ✓-marked). Text args (`/notify 30m`, `/notify off`) still work. |
+| `/refund` | Bare `/refund` shows the last 10 orders as inline buttons; tap to draft a refund offer. The draft lands in `/inbox` for Approve / Edit / Reject. |
+| `/drain_threads` | Drain unanswered WhatsApp + Instagram threads through the persona — useful when a backlog has built up while the bot was offline. |
 | `/cancel` | Cancel the current step. |
 | `/restart` | Wipe conversation memory for this chat. |
+| `/logout` | Unpair this Telegram chat from the owner identity. |
 
 Free-text DMs go through the same orchestrator the customer-facing
 channels use, with the owner-side persona (`owner_agent/*.md`) loaded

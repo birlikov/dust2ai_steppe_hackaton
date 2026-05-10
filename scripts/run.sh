@@ -16,6 +16,9 @@
 #   6. Starts the FastAPI backend on :8000 (storefront mounted at /).
 #   7. Starts the Telegram bot (--no-bot disables this).
 #   8. Opens an ngrok tunnel on :8000 and prints the public HTTPS URL.
+#   8.5. Registers Meta-shaped webhooks (whatsapp_register_webhook +
+#        instagram_register_webhook) against the live ngrok URL so the
+#        simulator can deliver inbound events without manual wiring.
 #
 # Press Ctrl-C to stop everything. The trap kills all background processes.
 #
@@ -360,6 +363,33 @@ for t in tunnels:
         fi
         sleep 0.5
     done
+fi
+
+# ---------------------------------------------------------------------------
+# 8.5 Register Meta-shaped webhooks with the simulator at the live URL.
+# ---------------------------------------------------------------------------
+if [ -n "$PUBLIC_URL" ]; then
+    echo "▶ registering Meta-shaped webhooks against $PUBLIC_URL…"
+    uv run python - <<PY
+import asyncio
+from src.mcp.http_client import build_default_client, call_with_retry, McpError, McpTransportError
+
+URL = "$PUBLIC_URL"
+
+async def main() -> None:
+    async with build_default_client() as mcp:
+        for tool, suffix in (
+            ("whatsapp_register_webhook", "/webhook/whatsapp"),
+            ("instagram_register_webhook", "/webhook/instagram"),
+        ):
+            try:
+                await call_with_retry(mcp, tool, {"url": URL + suffix})
+                print(f"  ✓ {tool}: {URL}{suffix}")
+            except (McpTransportError, McpError) as exc:
+                print(f"  ⚠ {tool} skipped: {exc}")
+
+asyncio.run(main())
+PY
 fi
 
 # ---------------------------------------------------------------------------

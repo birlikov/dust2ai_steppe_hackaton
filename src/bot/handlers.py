@@ -50,8 +50,8 @@ HELP_TEXT = (
     "  /budget          — marketing budget + recent website leads (priority-scored)\n"
     "  /inbox           — posts waiting for your Approve / Edit / Reject\n"
     "  /notify          — set push cadence (tap a preset: 1m / 30m / 2h / off)\n"
-    "  /refund <id>     — queue a refund offer for an order id\n"
-    "  /wire_webhooks   — register Meta WhatsApp + Instagram webhooks at a URL\n"
+    "  /refund          — pick an order + queue a refund offer (or /refund <id>)\n"
+    "  /drain_threads   — drain unanswered customer threads through the persona\n"
     "  /restart         — clear my conversation memory\n"
     "  /cancel          — cancel the current step\n"
 )

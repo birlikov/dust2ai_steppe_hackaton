@@ -90,7 +90,7 @@
 |---|---|---|
 | `whatsapp_list_threads` | **prod** | `cmd_dashboard` "live conversations" row |
 | `whatsapp_send` | **prod** + **runner** | `WorldPoller._handle_whatsapp` ; Meta-webhook dispatch in `POST /webhook/whatsapp` |
-| `whatsapp_register_webhook` | **on-demand** | `cmd_wire_webhooks` (owner can wire Meta against the live ngrok URL) |
+| `whatsapp_register_webhook` | **boot** | `scripts/run.sh` step 8.5 — auto-registered against the live ngrok URL right after the tunnel comes up; idempotent (failures are warnings, not fatal). |
 | `whatsapp_inject_inbound` | **script** | `test_persona_channels.py` ; `world_inspect.py` |
 
 ## instagram_*  (Channel)
@@ -103,7 +103,7 @@
 | `instagram_schedule_post` | **script** | `seed_drafts.py` (3 posts queued for owner approval) |
 | `instagram_approve_post` | **on-demand** | `_approve_draft` Approve callback |
 | `instagram_publish_post` | **on-demand** | `_approve_draft` Approve callback |
-| `instagram_register_webhook` | **on-demand** | `cmd_wire_webhooks` |
+| `instagram_register_webhook` | **boot** | `scripts/run.sh` step 8.5 — auto-registered against the live ngrok URL alongside the WhatsApp webhook. |
 | `instagram_inject_dm` | **script** | `test_persona_channels.py` |
 
 ## gb_*  (Google Business)

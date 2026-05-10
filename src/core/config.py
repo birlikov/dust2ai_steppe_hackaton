@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     # Off by default — flip to ``true`` for the demo. Polls
     # ``kitchen_list_tickets`` every ``kitchen_tick_s`` seconds;
     # capacity-aware (rejects when remaining < ``kitchen_reject_threshold_min``).
-    kitchen_auto_demo: bool = False
+    kitchen_auto_demo: bool = True
     kitchen_tick_s: float = 20.0
     kitchen_reject_threshold_min: int = 30
 

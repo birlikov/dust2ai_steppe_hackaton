@@ -1,4 +1,4 @@
-"""Inline-keyboard helpers — draft + notify."""
+"""Inline-keyboard helpers — draft + notify + refund."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from src.bot.keyboards import (
     notify_keyboard,
     parse_draft_callback,
     parse_notify_callback,
+    parse_refund_callback,
+    refund_picker_keyboard,
 )
 
 
@@ -79,3 +81,73 @@ def test_notify_keyboard_callback_data_decodes() -> None:
             cb = button.callback_data or ""
             # Should not raise.
             parse_notify_callback(cb)
+
+
+# ---------------------------------------------------------------------------
+# refund:pick callbacks
+# ---------------------------------------------------------------------------
+
+
+def test_parse_refund_callback_roundtrip() -> None:
+    """Standard simulator order id parses cleanly."""
+    order_id = "sq_order_1778416371695"
+    data = f"refund:pick:{order_id}"
+    assert parse_refund_callback(data) == order_id
+
+
+def test_parse_refund_callback_short_id() -> None:
+    """Short or arbitrary ids also parse."""
+    assert parse_refund_callback("refund:pick:abc123") == "abc123"
+
+
+def test_parse_refund_callback_invalid_prefix() -> None:
+    """Wrong prefix raises ValueError."""
+    with pytest.raises(ValueError):
+        parse_refund_callback("draft:approve:abc")
+
+
+def test_parse_refund_callback_empty_order_id() -> None:
+    """Bare prefix with no order id raises ValueError."""
+    with pytest.raises(ValueError):
+        parse_refund_callback("refund:pick:")
+
+
+def test_parse_refund_callback_completely_wrong() -> None:
+    """Totally unrelated string raises ValueError."""
+    with pytest.raises(ValueError):
+        parse_refund_callback("notify:60")
+
+
+def test_refund_picker_keyboard_one_row_per_order() -> None:
+    """Each order maps to exactly one button row."""
+    orders: list[dict[str, object]] = [
+        {"id": "sq_order_111", "customerName": "Alice"},
+        {"id": "sq_order_222", "customerName": "Bob"},
+    ]
+    kb = refund_picker_keyboard(orders)
+    assert len(kb.inline_keyboard) == 2
+    for row in kb.inline_keyboard:
+        assert len(row) == 1
+
+
+def test_refund_picker_keyboard_callback_data_roundtrips() -> None:
+    """Every button's callback_data decodes back to its order_id."""
+    orders: list[dict[str, object]] = [
+        {"id": "sq_order_abc", "customerName": "Carol"},
+        {"id": "sq_order_xyz", "customerName": "Dan"},
+    ]
+    kb = refund_picker_keyboard(orders)
+    order_ids = [str(o["id"]) for o in orders]
+    for row, expected_id in zip(kb.inline_keyboard, order_ids, strict=True):
+        cb = row[0].callback_data or ""
+        assert parse_refund_callback(cb) == expected_id
+
+
+def test_refund_picker_keyboard_skips_orders_without_id() -> None:
+    """Orders missing both 'id' and 'orderId' are silently skipped."""
+    orders: list[dict[str, object]] = [
+        {"customerName": "Ghost"},  # no id field
+        {"id": "sq_order_real", "customerName": "Real"},
+    ]
+    kb = refund_picker_keyboard(orders)
+    assert len(kb.inline_keyboard) == 1

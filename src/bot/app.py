@@ -39,7 +39,10 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="inbox", description="Items waiting for your Approve / Edit / Reject"),
     BotCommand(command="notify", description="Set push cadence (tap a preset)"),
     BotCommand(command="refund", description="Draft a refund for an order id"),
-    BotCommand(command="wire_webhooks", description="Register Meta WA + IG webhooks at a URL"),
+    BotCommand(
+        command="drain_threads",
+        description="Reply to unanswered WhatsApp + Instagram threads",
+    ),
     BotCommand(command="cancel", description="Cancel the current step"),
     BotCommand(command="restart", description="Wipe conversation memory"),
     BotCommand(command="logout", description="Unpair this chat from the owner role"),
