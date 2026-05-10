@@ -89,10 +89,10 @@ If the team's tunnel is still up at evaluation time:
 
 | Surface | URL / handle |
 |---|---|
-| Storefront + on-site chat | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app> |
-| Machine-readable agent index | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/agent.txt> |
-| Live catalog (MCP-backed) | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/api/catalog> |
-| Static catalog (build-time fallback) | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/catalog.json> |
+| Storefront + on-site chat | <https://1cd5-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app> |
+| Machine-readable agent index | <https://1cd5-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/agent.txt> |
+| Live catalog (MCP-backed) | <https://1cd5-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/api/catalog> |
+| Static catalog (build-time fallback) | <https://1cd5-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/catalog.json> |
 | Telegram owner bot | `@happycake_agent_bot` |
 
 ### Pairing your Telegram chat with the team's bot

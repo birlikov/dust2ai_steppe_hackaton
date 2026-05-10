@@ -6,8 +6,10 @@ later mark it ready. This module closes the loop for the demo so
 evaluators see the full *order → ticket → accept → ready* path complete
 in real time, including the ``kitchen_*`` evaluator counter increments.
 
-Disabled by default. Enable with ``KITCHEN_AUTO_DEMO=true`` in
-``.env``. The supervisor is structurally a sibling of
+Enabled by default (``KITCHEN_AUTO_DEMO=true`` in ``.env.example``).
+Set to ``false`` if running ``scripts/run_scenario.py`` against the
+same team token to avoid two consumers racing on ticket acceptance.
+The supervisor is structurally a sibling of
 :class:`src.world.runner.WorldRunner` — same restart-loop shape, same
 cancellation semantics.
 

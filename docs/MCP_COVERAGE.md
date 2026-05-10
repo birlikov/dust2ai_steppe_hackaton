@@ -42,7 +42,7 @@
 | `kitchen_list_tickets` | **prod** + **runner** | `cmd_dashboard` "tickets in flight" row ; `KitchenRunner._tick` polls `pending` + `accepted` |
 | `kitchen_get_production_summary` | **prod** | `cmd_dashboard` ; notifier diff |
 | `kitchen_create_ticket` | **prod** | `POST /api/order` happy path (every confirmed order) |
-| `kitchen_accept_ticket` | **runner** | `KitchenRunner._accept` (gated by `KITCHEN_AUTO_DEMO=true`) |
+| `kitchen_accept_ticket` | **runner** | `KitchenRunner._accept` (default-on; flip `KITCHEN_AUTO_DEMO=false` only if running `scripts/run_scenario.py` against the same token) |
 | `kitchen_reject_ticket` | **runner** | `KitchenRunner._reject` when remaining capacity dips below threshold |
 | `kitchen_mark_ready` | **runner** | `KitchenRunner._mark_ready` once a ticket's lead time has elapsed |
 
