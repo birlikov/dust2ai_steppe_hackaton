@@ -25,6 +25,8 @@ from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.mcp.http_client import HappycakeMcpClient, build_default_client
 from src.storage import db
+from src.workflows.orchestrator import Orchestrator
+from src.world.runner import WorldRunner
 
 log = get_logger(__name__)
 
@@ -34,6 +36,7 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="dashboard", description="Today's sales, kitchen, what's urgent"),
     BotCommand(command="budget", description="Marketing budget + recent leads"),
     BotCommand(command="inbox", description="Items waiting for your Approve / Edit / Reject"),
+    BotCommand(command="notify", description="Set push cadence (tap a preset)"),
     BotCommand(command="cancel", description="Cancel the current step"),
     BotCommand(command="restart", description="Wipe conversation memory"),
     BotCommand(command="logout", description="Unpair this chat from the owner role"),
@@ -96,6 +99,8 @@ async def run_polling(
 
     settings = get_settings()
     notifier_task: asyncio.Task[None] | None = None
+    poller_runner: WorldRunner | None = None
+    poller_task: asyncio.Task[None] | None = None
     if mcp is not None:
         notifier_task = asyncio.create_task(
             bot_notifier.run(
@@ -111,6 +116,19 @@ async def run_polling(
             "notifier.scheduled",
             interval_s=settings.notifier_interval_s,
         )
+
+        if settings.world_poller_enabled:
+            poller_runner = WorldRunner(
+                mcp=mcp,
+                orchestrator=Orchestrator(bridge=bridge),
+            )
+            poller_task = asyncio.create_task(
+                poller_runner.run(),
+                name="world-poller",
+            )
+            log.info("world.poller.scheduled")
+        else:
+            log.info("world.poller.disabled", reason="WORLD_POLLER_ENABLED=0")
 
     try:
         if mcp is not None:
@@ -129,6 +147,12 @@ async def run_polling(
                 owner_bridge=owner_bridge,
             )
     finally:
+        if poller_runner is not None:
+            poller_runner.stop()
+        if poller_task is not None and not poller_task.done():
+            poller_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await poller_task
         if notifier_task is not None and not notifier_task.done():
             notifier_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
