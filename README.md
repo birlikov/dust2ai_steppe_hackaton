@@ -11,38 +11,91 @@
 > **MCP server**: hosted by Steppe Business Club; 55 tools across 8
 > families.
 
-## TL;DR — what to test
+## TL;DR — what to evaluate
 
-After running `./scripts/run.sh` you have three things to try:
+There are three independent surfaces you can poke. Each is fully
+exercised by the runtime persona; none use canned answers.
 
 1. **Storefront + on-site chat** — the script prints a public ngrok HTTPS
    URL; open it, browse the catalog, ask the chat widget about prices,
-   timing, allergens, custom orders.
-2. **Owner cockpit** — DM `@happycake_agent_bot` on Telegram, send
-   `/start` (the bot prompts for the passphrase set in `.env`), then try
-   `/dashboard`, `/budget`, `/inbox`, `/notify 30m`, or just type a
-   free-text question.
-3. **Persona-driven channel coverage** —
-   `uv run python scripts/test_persona_channels.py` runs WhatsApp +
-   Instagram + Google Business through the live runtime persona on the
-   live MCP and writes a scorecard to `data/scorecard_persona_*.json`.
+   timing, allergens, custom orders. Everything the chat says is grounded
+   in a live MCP tool call (or it refuses cleanly).
+2. **Owner cockpit on Telegram** — DM your bot, send `/start` (with the
+   `OWNER_PASSPHRASE` if you set one), then try `/dashboard`, `/budget`,
+   `/inbox`, `/notify 30m`, or any free-text question. Replies are
+   MCP-grounded too.
+3. **Persona-driven channel coverage** — `uv run python
+   scripts/test_persona_channels.py` puts a real customer message on
+   WhatsApp, Instagram DM, and Google Business reviews **through the
+   runtime persona on the live MCP** and writes a scorecard to
+   `data/scorecard_persona_<utc-ts>.json`. This is the most economical
+   single-command proof the channels work end-to-end.
+
+A complete evaluator path on a clean machine is in **Quickstart** below.
+If the team's hosted demo is still up at evaluation time, see
+**Live demo (current snapshot)** to skip the local boot.
+
+## Prerequisites
+
+Available on the hackathon-prepared environment; on a clean Linux/macOS
+machine install once:
+
+| Tool | Why | Install hint |
+|---|---|---|
+| Python ≥ 3.12 | Backend runtime | system package, `pyenv`, etc. |
+| [`uv`](https://docs.astral.sh/uv/) | Python deps + venv (replaces pip/poetry) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| Node ≥ 20 + npm | Astro storefront build (no runtime JS bundler — JS ships as static `dist/`) | nvm, fnm, or system package |
+| [`claude`](https://docs.anthropic.com/en/docs/claude-code) (Claude Code CLI) | The runtime LLM. The bridge shells out to `claude -p` — no Anthropic SDK in production, per brief. | `npm i -g @anthropic-ai/claude-code` |
+| [`ngrok`](https://ngrok.com/) | Public HTTPS tunnel for the storefront + Meta-shaped webhooks | platform package + free authtoken |
+
+You also need two account-bound secrets (next section).
 
 ## Quickstart
 
 ```bash
-git clone <this-repo> hackaton && cd hackaton
+git clone https://github.com/birlikov/dust2ai_steppe_hackaton.git hackaton
+cd hackaton
 cp config/.env.example .env
-# Fill TELEGRAM_BOT_TOKEN and SBC_TEAM_TOKEN — both are required.
+# Edit .env (see table below) — only two values are strictly required.
 ./scripts/run.sh                  # full demo (bot + storefront + ngrok)
-# ./scripts/run.sh --no-bot       # storefront + ngrok only
+# ./scripts/run.sh --no-bot       # storefront + ngrok only (skip Telegram)
 # ./scripts/run.sh --no-ngrok     # local dev on :8000
 ```
 
-`./scripts/run.sh` validates `.env`, regenerates `.mcp.json`, runs
-`uv sync`, builds the Astro storefront, launches FastAPI on `:8000`,
-starts the bot, and opens an ngrok tunnel. The `claude` CLI must be on
-`PATH` (it provides the runtime LLM via the user's Max subscription —
-the brief explicitly disallows the Anthropic SDK in production).
+Required values in `.env`:
+
+| Var | How to get it | Required? |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | DM `@BotFather` on Telegram → `/newbot` → follow prompts. Note the username it gives you (`@your_bot_handle`) — that's the bot you'll DM. | ✓ |
+| `SBC_TEAM_TOKEN` | Steppe Business Club hackathon dashboard at <https://www.steppebusinessclub.com/hackathon>. | ✓ |
+| `NGROK_AUTHTOKEN` | <https://dashboard.ngrok.com/get-started/your-authtoken> (free tier is fine). | strongly recommended |
+| `OWNER_PASSPHRASE` | Pick any hard-to-guess string. **If left empty, the bot is in open-pair mode and pairs with the first chat that sends `/start`** — fine for fresh-clone evaluation. | optional |
+| `OWNER_CHAT_ID` | Auto-captured on first paired `/start`; you can leave it blank. | optional |
+
+`./scripts/run.sh` then validates `.env`, regenerates `.mcp.json`,
+patches `.claude/settings.local.json` (so the `claude -p` subprocess can
+call MCP tools without prompting), runs `uv sync` + `npm install`, builds
+the Astro storefront with `PUBLIC_API_BASE=""` (relative URLs), launches
+FastAPI on `:8000`, starts the Telegram bot, and opens an ngrok tunnel.
+At the end it prints a summary block with the public URL and the bot
+username. `Ctrl-C` tears down everything via the script's trap.
+
+## Live demo (current snapshot)
+
+If the team's tunnel is still up at evaluation time:
+
+| Surface | URL / handle |
+|---|---|
+| Storefront + on-site chat | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app> |
+| Machine-readable agent index | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/agent.txt> |
+| Live catalog (MCP-backed) | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/api/catalog> |
+| Static catalog (build-time fallback) | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/catalog.json> |
+| Telegram owner bot | `@happycake_agent_bot` |
+
+> **ngrok-free URLs rotate** when `./scripts/run.sh` restarts. If the
+> link 502s, run the Quickstart locally — your own URL appears in the
+> script's final summary. The first browser hit shows ngrok's interstitial;
+> internal fetches send `ngrok-skip-browser-warning: true` to bypass it.
 
 ## What's wired
 
@@ -63,7 +116,11 @@ the owner does not gate them. `/inbox` is reserved for marketing posts
 (IG captions, GB posts, paid-ad creatives) where brandbook §7 requires
 owner approval.
 
-## Owner controls (Telegram bot, `@happycake_agent_bot`)
+## Owner controls (Telegram bot)
+
+The team's hosted bot is `@happycake_agent_bot`. When you run the
+Quickstart yourself, your bot has whatever username you set in BotFather.
+The command set is identical.
 
 | Command | What it does |
 |---|---|
@@ -97,21 +154,46 @@ audit-log entry. Full diagram in **`ARCHITECTURE.md`**.
 
 ## Live evidence
 
-Latest persona-channel scorecard
-(`data/scorecard_persona_20260510T024005Z.json`, generated by
-`scripts/test_persona_channels.py` against the live MCP):
+The team's last persona-channel run against the live MCP scored:
 
 | Dimension | Score | Note |
 |---|---|---|
-| `evaluator_score_channel_response` | **80 / 100** | Brand-correct replies on WA, IG, GB — generated by the runtime persona, not canned strings |
+| `evaluator_score_channel_response` | **80 / 100** | Brand-correct replies on WhatsApp, Instagram DM, and Google Business — generated by the runtime persona, not canned strings |
 | `evaluator_score_world_scenario` | **100 / 100** | 9 events in timeline, 6 delivered, 200 audit calls |
 | `whatsappInbound` | 8 | Live world events drained by `WorldPoller` |
 | `auditCalls` | 200 | MCP-call evidence |
 
-Outbound channel counters are credited via the evaluator score, not raw
-counts (see `docs/SUBMISSION_EVIDENCE.md` for the per-channel excerpts +
-proof points). To repeat:
-`uv run python scripts/test_persona_channels.py`.
+Verbatim per-channel excerpts (with proof points) are in
+**`docs/SUBMISSION_EVIDENCE.md`**. Outbound counters are credited via
+the evaluator scoring, not raw counts.
+
+To produce your own scorecard against the live MCP:
+
+```bash
+uv run python scripts/test_persona_channels.py
+# → data/scorecard_persona_<utc-ts>.json
+```
+
+The `data/` directory is gitignored, so the scorecards aren't committed —
+running the test is the canonical way to reproduce this evidence on a
+fresh clone. Repeat as often as you like; each run rotates the timestamp.
+
+## Where each piece of evidence lives
+
+| Evaluator dimension | Where to look |
+|---|---|
+| Architecture, agent loop, two-Claude pattern, MCP usage | `ARCHITECTURE.md` (313 lines, diagrams + tables) |
+| Acceptance criteria per workflow | `docs/specs.md` (one row per AC, brief-analyst output) |
+| Per-tool MCP catalog with schemas | `docs/mcp_inventory.md` (55 tools across 8 families) |
+| Brand voice + hard rules | `HCU_BRANDBOOK.md` (the runtime's source of truth) |
+| Web ↔ backend contract | `docs/CONTRACTS.md` |
+| $500 → $5,000 marketing case | `docs/MARKETING_PLAN.md` |
+| Scripted demo + smoke runbook | `docs/DEMO.md` |
+| Live evaluator snapshots | `docs/SUBMISSION_EVIDENCE.md` |
+| Critic / self-audit | `docs/critic_report.md` |
+| Storefront-only README | `web/README.md` |
+| Customer-facing persona | `agent/{SOUL,RULES,TOOLS,EXAMPLES}.md` |
+| Owner-facing persona | `owner_agent/{SOUL,RULES,TOOLS,EXAMPLES,SKILLS}.md` |
 
 ## Repo layout
 
