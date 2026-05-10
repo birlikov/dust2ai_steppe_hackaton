@@ -57,8 +57,10 @@ git clone https://github.com/birlikov/dust2ai_steppe_hackaton.git hackaton
 cd hackaton
 cp config/.env.example .env
 # Edit .env (see table below) — only two values are strictly required.
-./scripts/run.sh                  # full demo (bot + storefront + ngrok)
-# ./scripts/run.sh --no-bot       # storefront + ngrok only (skip Telegram)
+./scripts/run.sh                  # full demo (bot + always-on world poller + storefront + ngrok)
+# ./scripts/run.sh --no-bot       # storefront + ngrok only (skip Telegram + poller)
+# ./scripts/run.sh --no-poller    # bot + storefront + ngrok, no world-event listener
+#                                 # (use when running scripts/run_scenario.py against the same team token)
 # ./scripts/run.sh --no-ngrok     # local dev on :8000
 ```
 
@@ -107,7 +109,7 @@ persona:
 | 1 | Website / storefront | `web/` (Astro + Tailwind) → `/api/catalog` + `POST /api/chat` + `POST /api/order` | `square_list_catalog`, `kitchen_get_capacity` |
 | 2 | Agent-friendly site | JSON-LD `Product` + `Offer` per product page; `/api/catalog`, `/sitemap.xml`, `/robots.txt`, `/agent.txt` (machine-readable index for crawling agents); predictable URLs | (read-only artefacts) |
 | 3 | On-site assistant | Floating cashier widget → `POST /api/chat` → orchestrator → `claude -p` (with MCP). Cart-aware: knows what's in the basket and can place orders end-to-end | every relevant family |
-| 4 | WhatsApp | `WorldPoller` consumes `world_next_event` → orchestrator → `whatsapp_send`. Accepted orders auto-fire `square_create_order` + `kitchen_create_ticket` and push a one-line `📦` summary to the owner Telegram chat | `square_create_order`, `kitchen_create_ticket`, `whatsapp_send` |
+| 4 | WhatsApp | The bot process spawns an always-on `WorldRunner` that drives `WorldPoller` (drains `world_next_event`) → orchestrator → `whatsapp_send`. Accepted orders auto-fire `square_create_order` + `kitchen_create_ticket` and push a one-line `📦` summary to the owner Telegram chat. `--no-poller` disables the always-on listener for scripted-scenario runs. | `square_create_order`, `kitchen_create_ticket`, `whatsapp_send` |
 | 5 | Instagram | DMs + comments through the same poller; feed-post drafts go through `/inbox` (Approve / Edit / Reject inline keyboard) per brandbook §7 | `instagram_send_dm`, `instagram_reply_to_comment`, `instagram_schedule_post`, `instagram_approve_post`, `instagram_publish_post` |
 | 6 | $500 marketing plan + channel coverage | `docs/MARKETING_PLAN.md` (human plan) + `scripts/seed_marketing.py` (executable closed loop) + `scripts/test_persona_channels.py` (WA + IG + GB through the runtime persona end-to-end) | full `marketing_*` family + `evaluator_score_*` |
 

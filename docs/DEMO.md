@@ -60,9 +60,19 @@ send the passphrase as your first message to pair the chat.
 Variants:
 
 ```bash
-./scripts/run.sh --no-bot    # storefront only (skip Telegram polling)
-./scripts/run.sh --no-ngrok  # local development on http://localhost:8000
+./scripts/run.sh --no-bot     # storefront only (skip Telegram + poller)
+./scripts/run.sh --no-poller  # bot + storefront + ngrok, no always-on world listener
+                              # (use this when you also plan to run scripts/run_scenario.py)
+./scripts/run.sh --no-ngrok   # local development on http://localhost:8000
 ```
+
+By default the bot process runs an **always-on `WorldRunner`** that
+drains `world_next_event` continuously, so simulator-emitted WhatsApp
+and Instagram traffic gets a brand-voice reply without you having to
+launch a scenario by hand. Disable it with `--no-poller` (or
+`WORLD_POLLER_ENABLED=false` in `.env`) before running
+`scripts/run_scenario.py` against the same team token — otherwise two
+consumers race on the same timeline and steal events from each other.
 
 Press Ctrl-C to stop everything; the trap kills uvicorn, ngrok, and
 the bot in order.
@@ -158,7 +168,7 @@ In the browser at `http://localhost:4321`:
 |---|---|
 | `evaluator_score_marketing_loop` | `scripts/seed_marketing.py` runs the full plan→launch→leads→route→adjust→report cycle |
 | `evaluator_score_pos_kitchen_flow` | `scripts/run_scenario.py` events: when the runtime persona accepts an order in WhatsApp / IG, it calls `square_create_order` + `kitchen_create_ticket` via MCP |
-| `evaluator_score_channel_response` | WhatsApp + Instagram + Google Business all see traffic — WA / IG via the `WorldPoller` dispatchers, GB via `seed_review_replies.py` |
+| `evaluator_score_channel_response` | WhatsApp + Instagram + Google Business all see traffic — WA / IG via the `WorldPoller` dispatchers (driven by `WorldRunner` always-on inside the bot, or by `run_scenario.py` for scripted runs), GB via `seed_review_replies.py` |
 | `evaluator_score_world_scenario` | `run_scenario.py` calls `world_start_scenario` and drains events with `WorldPoller` + `world_advance_time` |
 | Functional Tester (customer scenarios) | The on-site widget, world events, and Telegram free-text all route through the orchestrator and never hardcode answers |
 | Agent-friendliness auditor | `web/` exposes JSON-LD per product, `/catalog.json`, `/policies` JSON, `/sitemap.xml`, predictable URLs |

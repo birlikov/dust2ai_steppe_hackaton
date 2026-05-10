@@ -58,10 +58,17 @@ in `.env`; we removed the dependency from `pyproject.toml` in Phase 1.
    World engine  ───┐              │
                     ▼              ▼
    ┌────────────────────────────────────────────┐
+   │  WorldRunner      (src/world/runner.py)    │
+   │  long-lived supervisor in the bot process; │
+   │  restarts WorldPoller on error/quiet exit  │
+   │     │                                      │
+   │     ▼                                      │
    │  WorldPoller     (src/world/poller.py)     │
    │  drives world_next_event → channel handler │
    │  whatsapp_send / instagram_send_dm /       │
    │  instagram_reply_to_comment via MCP        │
+   │  (off when WORLD_POLLER_ENABLED=false or   │
+   │   ./scripts/run.sh --no-poller)            │
    └────────────────┬───────────────────────────┘
                     │
                     ▼
@@ -134,6 +141,21 @@ anything material changed (new orders, new pending drafts, kitchen
 filling up) ask the owner-bridge for a 1-2 line English brief and push
 it to the owner's Telegram chat. Idle ticks stay silent. The task is
 cancellation-safe and never crashes the polling loop on errors.
+
+### 3.4 Always-on world poller — `src/world/runner.py`
+
+Sister task to the notifier, also in the bot process. The simulator
+emits inbound WhatsApp / Instagram messages on the team timeline —
+visible via `world_next_event`. `WorldRunner` is a thin supervisor
+around `WorldPoller`: it spins the poller in a restart loop with
+bounded exponential backoff so transient MCP errors don't kill the
+listener. Each event is dispatched to the same `Orchestrator` the web
+chat uses, and the reply is posted via the channel-appropriate MCP
+tool (`whatsapp_send`, `instagram_send_dm`, `instagram_reply_to_comment`).
+Set `WORLD_POLLER_ENABLED=false` in `.env` (or run
+`./scripts/run.sh --no-poller`) to disable it — required when running
+`scripts/run_scenario.py` against the same team token, since two
+consumers would race on `world_next_event`.
 
 ## 4. Owner-side Telegram bot
 
@@ -278,7 +300,7 @@ src/
   webhooks/   FastAPI app: webhook receiver + storefront API + chat
   mcp/        HappycakeMcpClient (HTTPS+JSON-RPC) + registry (stdio/SSE)
   workflows/  Orchestrator — channel-agnostic per-turn glue
-  world/      WorldPoller — drives world_next_event through dispatchers
+  world/      WorldPoller (one-shot drain) + WorldRunner (always-on supervisor)
   storage/    SQLite repos (sessions, drafts, leads, audit, idempotency)
   core/       Config, logging, errors, idempotency, retry, voice linter
   scenarios/  YAML acceptance harness (kept for unit-style smoke)

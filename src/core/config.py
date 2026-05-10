@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     # --- Owner bot notifier ---
     notifier_interval_s: int = 1800  # 30 min between proactive checks
     owner_chat_id: int | None = None  # fallback if owner_identity isn't captured
+
+    # --- Always-on world poller (sandbox listener) ---
+    # Drains ``world_next_event`` continuously inside the bot process so
+    # simulator-emitted WhatsApp / Instagram messages are routed through
+    # the customer-facing orchestrator without needing a manual scenario
+    # run. Disable when running ``scripts/run_scenario.py`` against the
+    # same team token to avoid two consumers racing on the same timeline.
+    world_poller_enabled: bool = True
     # If set, the bot only responds to chats paired by sending this exact
     # passphrase (or to the chat already in `owner_identity`). Unset → open
     # mode (dev / fresh-clone). Never commit a real value.

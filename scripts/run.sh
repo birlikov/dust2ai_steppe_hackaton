@@ -20,9 +20,12 @@
 # Press Ctrl-C to stop everything. The trap kills all background processes.
 #
 # Usage:
-#   ./scripts/run.sh            # full demo (bot + storefront + ngrok)
-#   ./scripts/run.sh --no-bot   # storefront + ngrok only (skip Telegram)
-#   ./scripts/run.sh --no-ngrok # local development on :8000
+#   ./scripts/run.sh              # full demo (bot + always-on poller + storefront + ngrok)
+#   ./scripts/run.sh --no-bot     # storefront + ngrok only (skip Telegram + poller)
+#   ./scripts/run.sh --no-poller  # bot + storefront + ngrok, no world-event poller
+#                                 # (use this when running scripts/run_scenario.py
+#                                 # against the same team token)
+#   ./scripts/run.sh --no-ngrok   # local development on :8000
 
 set -euo pipefail
 
@@ -31,12 +34,14 @@ cd "$REPO_ROOT"
 
 WITH_BOT=1
 WITH_NGROK=1
+WITH_POLLER=1
 for arg in "$@"; do
     case "$arg" in
         --no-bot) WITH_BOT=0 ;;
         --no-ngrok) WITH_NGROK=0 ;;
+        --no-poller) WITH_POLLER=0 ;;
         --help|-h)
-            head -25 "$0" | sed -n 's/^# \?//p'
+            head -28 "$0" | sed -n 's/^# \?//p'
             exit 0
             ;;
         *)
@@ -225,7 +230,13 @@ if [ "$WITH_BOT" = "1" ]; then
     if ! command -v claude > /dev/null 2>&1; then
         echo "  ⚠  claude CLI not on PATH — bot will reply '(no response)' to free text"
     fi
-    echo "▶ starting Telegram bot…"
+    if [ "$WITH_POLLER" = "1" ]; then
+        echo "▶ starting Telegram bot (with always-on world poller)…"
+        export WORLD_POLLER_ENABLED=true
+    else
+        echo "▶ starting Telegram bot (poller disabled — --no-poller)…"
+        export WORLD_POLLER_ENABLED=false
+    fi
     nohup uv run python -m src.bot.app > data/bot.log 2>&1 &
     BOT_PID=$!
     sleep 3
