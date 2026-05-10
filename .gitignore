@@ -34,6 +34,7 @@ scorecard.json
 
 # Claude Code user-local settings (agent files in .claude/agents/ are committed)
 .claude/settings.local.json
+.claude/scheduled_tasks*
 
 # Project MCP config — generated from .env by scripts/run.sh on every run.
 # Never edited by hand. Contains the SBC team token (a copy lives in .env).

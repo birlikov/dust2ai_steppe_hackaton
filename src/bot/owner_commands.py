@@ -133,13 +133,13 @@ async def cmd_budget(
 
 
 # ---------------------------------------------------------------------------
-# /drafts
+# /inbox
 # ---------------------------------------------------------------------------
 
 
 @router.message(Command("inbox", "drafts"))
 async def cmd_inbox(message: Message, bot: Bot, session_id: str) -> None:
-    """List everything waiting on the owner. /drafts kept as alias."""
+    """List everything waiting on the owner. Aliases: /inbox (canonical), /drafts (legacy)."""
     await bot.send_chat_action(message.chat.id, "typing")
     pending = await drafts.list_status("pending")
     if not pending:
@@ -204,7 +204,7 @@ async def cb_draft(
             session_id=session_id,
         )
     elif action == "reject":
-        await drafts.reject(draft_id, "owner rejected via /drafts")
+        await drafts.reject(draft_id, "owner rejected via /inbox")
         await callback.answer("Rejected.")
         await _safe_callback_edit(
             callback,

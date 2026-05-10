@@ -3,7 +3,7 @@
 Runs on **all** update types (messages and callback queries from inline
 keyboards). Without this, callback handlers that declare ``session_id: str``
 silently fail to dispatch — aiogram can't satisfy the parameter and the
-handler is never called, which is what was killing the /drafts Approve / Edit
+handler is never called, which is what was killing the /inbox Approve / Edit
 / Reject taps.
 """
 

@@ -1,6 +1,10 @@
 # HappyCake AI — Hackathon Execution Plan
 
-> **Live plan, single source of truth.** Updated on every commit. Any contributor or future session reads this file first, then `_workfiles/HANDOFF.md` for internal-only context.
+> **Status: historical.** This file logs the H-by-H execution decisions
+> made during the build. The current shipping state lives in `README.md`
+> and `ARCHITECTURE.md`. Read those first; this doc is here for the
+> Code Reviewer evaluator's benefit and for future maintainers who want
+> the trail.
 
 ## Project goal
 

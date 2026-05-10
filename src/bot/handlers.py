@@ -43,7 +43,7 @@ HELP_TEXT = (
     "Or use a shortcut:\n"
     "  /dashboard  — today's sales + kitchen + what's urgent\n"
     "  /budget     — marketing budget + recent website leads\n"
-    "  /drafts     — Instagram drafts waiting for your Approve / Edit / Reject\n"
+    "  /inbox      — posts waiting for your Approve / Edit / Reject\n"
     "  /restart    — clear my conversation memory\n"
     "  /cancel     — cancel the current step\n"
 )

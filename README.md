@@ -4,103 +4,146 @@
 > Land, TX cake business). Submission for the Steppe Business Club
 > *Agentic AI for Real Business* hackathon (May 9–10, 2026).
 >
-> **Repo**: public on submission. **Runtime model**: `claude-opus-4-7` via
-> the `claude` CLI (no Anthropic SDK in production). **MCP server**:
-> hosted by Steppe Business Club; 55 tools across 8 families.
+> One persona, every customer touchpoint: storefront chat, WhatsApp,
+> Instagram. One owner cockpit: Telegram. Every customer-facing claim is
+> grounded in a live MCP tool call. **Runtime model**: `claude-opus-4-7`
+> via the `claude` CLI subprocess (no Anthropic SDK in production).
+> **MCP server**: hosted by Steppe Business Club; 55 tools across 8
+> families.
 
-## What this submits
+## TL;DR — what to test
 
-Six outcomes drawn from brief §3, all wired to the same MCP-grounded
-runtime persona:
+After running `./scripts/run.sh` you have three things to try:
 
-| # | Outcome | Where it lives | Key tools |
-|---|---|---|---|
-| 1 | Website / storefront | `web/` (Astro + Tailwind, 8 routes) → `/api/catalog` | `square_list_catalog`, `kitchen_get_capacity` |
-| 2 | Agent-friendly site | JSON-LD `Product` + `Offer` per product page; `/catalog.json`, `/policies`, `/sitemap.xml`, `/robots.txt`; predictable URLs | (read-only artefacts) |
-| 3 | On-site assistant | Floating chat widget → `POST /api/chat` → orchestrator → `claude -p` (with MCP) | every relevant family |
-| 4 | WhatsApp | `WorldPoller` consumes `world_next_event` → orchestrator → `whatsapp_send`; orders create POS + kitchen tickets | `square_create_order`, `kitchen_create_ticket`, `whatsapp_send` |
-| 5 | Instagram | DMs + comments through the poller; feed posts go through the **drafts approval queue** in Telegram | `instagram_send_dm`, `instagram_reply_to_comment`, `instagram_schedule_post`, `instagram_approve_post`, `instagram_publish_post` |
-| 6 | $500 marketing plan | `docs/MARKETING_PLAN.md` (human plan) + `scripts/seed_marketing.py` (executable closed loop) | full `marketing_*` family + `evaluator_score_marketing_loop` |
+1. **Storefront + on-site chat** — the script prints a public ngrok HTTPS
+   URL; open it, browse the catalog, ask the chat widget about prices,
+   timing, allergens, custom orders.
+2. **Owner cockpit** — DM `@happycake_agent_bot` on Telegram, send
+   `/start` (the bot prompts for the passphrase set in `.env`), then try
+   `/dashboard`, `/budget`, `/inbox`, `/notify 30m`, or just type a
+   free-text question.
+3. **Persona-driven channel coverage** —
+   `uv run python scripts/test_persona_channels.py` runs WhatsApp +
+   Instagram + Google Business through the live runtime persona on the
+   live MCP and writes a scorecard to `data/scorecard_persona_*.json`.
 
-The owner controls everything from one Telegram bot:
-`/dashboard`, `/budget`, `/drafts` (Approve / Edit / Reject inline
-keyboard), plus `/help`, `/start`, `/cancel`, `/restart`.
-
-## Architecture in one paragraph
-
-We run **two Claudes**. Dev Claude (this repo's CLAUDE.md) plans, codes,
-reviews. Runtime Claude — the customer-facing HappyCake assistant — has
-its system prompt composed from four small files under `agent/` (SOUL,
-RULES, TOOLS, EXAMPLES) and is invoked by `src/agents/claude_bridge.py`
-shelling out to `claude -p --system-prompt …` with `ANTHROPIC_MODEL=claude-opus-4-7`.
-The bridge inherits MCP plumbing from `.claude/settings.local.json`, so the
-runtime can call MCP tools directly. Every channel (Telegram, WhatsApp,
-Instagram, website chat, world events) routes through one
-`Orchestrator` that adds session history, brand-voice lint, and an
-audit-log entry. Full diagram in `ARCHITECTURE.md`.
-
-## Run it from a clean clone
+## Quickstart
 
 ```bash
 git clone <this-repo> hackaton && cd hackaton
-
-# 1. Python deps
-uv sync
-
-# 2. tokens (Telegram bot + SBC team token; both required)
 cp config/.env.example .env
-# fill TELEGRAM_BOT_TOKEN and SBC_TEAM_TOKEN
-
-# 3. quality gate (clean)
-uv run ruff check src tests scripts examples
-uv run mypy src
-uv run pytest -q                 # 103 tests, ~5s
-
-# 4. web build (offline-safe; uses fallback catalog if backend is down)
-cd web && npm install && npm run build && cd ..
-
-# 5. five-minute end-to-end demo against the live MCP
-./scripts/demo.sh
+# Fill TELEGRAM_BOT_TOKEN and SBC_TEAM_TOKEN — both are required.
+./scripts/run.sh                  # full demo (bot + storefront + ngrok)
+# ./scripts/run.sh --no-bot       # storefront + ngrok only
+# ./scripts/run.sh --no-ngrok     # local dev on :8000
 ```
 
-The demo:
+`./scripts/run.sh` validates `.env`, regenerates `.mcp.json`, runs
+`uv sync`, builds the Astro storefront, launches FastAPI on `:8000`,
+starts the bot, and opens an ngrok tunnel. The `claude` CLI must be on
+`PATH` (it provides the runtime LLM via the user's Max subscription —
+the brief explicitly disallows the Anthropic SDK in production).
 
-1. Starts the FastAPI storefront API on `:8000`.
-2. Runs the marketing loop end-to-end (2 campaigns + 6 leads + adjust + report).
-3. Replies to every seeded Google Business review.
-4. Generates 3 Instagram post drafts and queues them for `/drafts` approval.
-5. Drives the world-engine scenario with `WorldPoller` + periodic `world_advance_time`.
-6. Self-grades via the five `evaluator_score_*` tools and writes
-   `data/team_report.json`.
+## What's wired
 
-The full operator runbook (manual / interactive flows, Telegram-side
-walkthroughs, troubleshooting) is in **`docs/DEMO.md`**.
+Six outcomes from brief §3, all served by the same MCP-grounded runtime
+persona:
 
-## Documentation
+| # | Outcome | Where it lives | Key tools |
+|---|---|---|---|
+| 1 | Website / storefront | `web/` (Astro + Tailwind) → `/api/catalog` + `POST /api/chat` + `POST /api/order` | `square_list_catalog`, `kitchen_get_capacity` |
+| 2 | Agent-friendly site | JSON-LD `Product` + `Offer` per product page; `/api/catalog`, `/sitemap.xml`, `/robots.txt`, `/agent.txt` (machine-readable index for crawling agents); predictable URLs | (read-only artefacts) |
+| 3 | On-site assistant | Floating cashier widget → `POST /api/chat` → orchestrator → `claude -p` (with MCP). Cart-aware: knows what's in the basket and can place orders end-to-end | every relevant family |
+| 4 | WhatsApp | `WorldPoller` consumes `world_next_event` → orchestrator → `whatsapp_send`. Accepted orders auto-fire `square_create_order` + `kitchen_create_ticket` and push a one-line `📦` summary to the owner Telegram chat | `square_create_order`, `kitchen_create_ticket`, `whatsapp_send` |
+| 5 | Instagram | DMs + comments through the same poller; feed-post drafts go through `/inbox` (Approve / Edit / Reject inline keyboard) per brandbook §7 | `instagram_send_dm`, `instagram_reply_to_comment`, `instagram_schedule_post`, `instagram_approve_post`, `instagram_publish_post` |
+| 6 | $500 marketing plan + channel coverage | `docs/MARKETING_PLAN.md` (human plan) + `scripts/seed_marketing.py` (executable closed loop) + `scripts/test_persona_channels.py` (WA + IG + GB through the runtime persona end-to-end) | full `marketing_*` family + `evaluator_score_*` |
 
-| File | What's in it |
+Customer orders are **auto-confirmed** on the `POST /api/order` path —
+the owner does not gate them. `/inbox` is reserved for marketing posts
+(IG captions, GB posts, paid-ad creatives) where brandbook §7 requires
+owner approval.
+
+## Owner controls (Telegram bot, `@happycake_agent_bot`)
+
+| Command | What it does |
 |---|---|
-| `ARCHITECTURE.md` | Two-Claude pattern, MCP routing, owner controls, channel adapters, POS + kitchen handoff, marketing loop, agent-friendliness surfaces, storage model, layout |
-| `docs/PLAN.md` | Live execution plan + the locked architectural decisions (do not relitigate) |
-| `docs/specs.md` | Acceptance criteria for all 6 workflows (60 ACs, 24 edge cases, 12 cross-cutting brand rules) — produced by `brief-analyst` at H+0 |
-| `docs/mcp_inventory.md` | All 55 MCP tools across 8 families with schemas + sample success / failure shapes — produced by `mcp-recon` at H+0 |
-| `docs/CONTRACTS.md` | Web ↔ backend API contract (the storefront and the FastAPI app build to this) |
-| `docs/MARKETING_PLAN.md` | $500/month plan with margin / AOV / conversion math + Sugar Land context (executable form: `scripts/seed_marketing.py`) |
-| `docs/DEMO.md` | Operator runbook from clean clone to artefacts |
-| `docs/critic_report.md` | Phase 4 critic scorecard (4 rubrics: code review, agent friendliness, operator UX, business analyst) |
-| `docs/decisions.md` | ADR log |
-| `HCU_BRANDBOOK.md` | The brand book — voice, palette, hard rules; the runtime persona is derived from this |
-| `HACKATHON_BRIEF.md` | The unsealed brief, verbatim |
-| `agent/README.md` | Why the persona is split into 4 files and how the composer wires them together |
+| `/start` | Pair this Telegram chat as the owner (gated by passphrase in `.env`); from then on, order-push and `/inbox` notifications land here. |
+| `/help` | Lists every command and how to use it. |
+| `/dashboard` | One-screen view: today's sales mix, kitchen utilisation, urgent items, drafts pending. |
+| `/budget` | Marketing budget remaining + recent attributed leads. |
+| `/inbox` (alias `/drafts`) | Marketing posts queued for Approve / Edit / Reject. Survives bot restart (SQLite). |
+| `/notify` | Set push interval (`/notify 1m`, `/notify 30m`, `/notify 2h`, `/notify off`, `/notify on`). |
+| `/cancel` | Cancel the current step. |
+| `/restart` | Wipe conversation memory for this chat. |
 
-## What's deliberately out of scope
+Free-text DMs go through the same orchestrator the customer-facing
+channels use, with the owner-side persona (`owner_agent/*.md`) loaded
+instead of the customer one.
 
-Per `ARCHITECTURE.md` §11: real Square / Meta / Google Ads credentials,
-multi-language copy, multi-tenant auth, LLM fine-tuning, microservices.
-Single process, single host, single tenant — that's the brief.
+## Architecture in one paragraph
 
-## License & IP
+We run **two Claudes**. Dev Claude (this repo's `CLAUDE.md`) plans,
+codes, reviews. Runtime Claude — the customer-facing HappyCake assistant
+— has its system prompt composed from four small files under `agent/`
+(SOUL, RULES, TOOLS, EXAMPLES) and is invoked by
+`src/agents/claude_bridge.py` shelling out to
+`claude -p --system-prompt …` with `ANTHROPIC_MODEL=claude-opus-4-7`.
+The owner-facing variant is composed the same way from `owner_agent/`.
+The bridge inherits MCP plumbing from `.claude/settings.local.json`, so
+the runtime can call MCP tools directly. Every channel (Telegram,
+WhatsApp, Instagram, website chat, world events) routes through one
+`Orchestrator` that adds session history, brand-voice lint, and an
+audit-log entry. Full diagram in **`ARCHITECTURE.md`**.
 
-Per the hackathon rules, submitted IP transfers to Steppe Business Club;
-this team retains a portfolio license. The repo remains public after the
-event.
+## Live evidence
+
+Latest persona-channel scorecard
+(`data/scorecard_persona_20260510T024005Z.json`, generated by
+`scripts/test_persona_channels.py` against the live MCP):
+
+| Dimension | Score | Note |
+|---|---|---|
+| `evaluator_score_channel_response` | **80 / 100** | Brand-correct replies on WA, IG, GB — generated by the runtime persona, not canned strings |
+| `evaluator_score_world_scenario` | **100 / 100** | 9 events in timeline, 6 delivered, 200 audit calls |
+| `whatsappInbound` | 8 | Live world events drained by `WorldPoller` |
+| `auditCalls` | 200 | MCP-call evidence |
+
+Outbound channel counters are credited via the evaluator score, not raw
+counts (see `docs/SUBMISSION_EVIDENCE.md` for the per-channel excerpts +
+proof points). To repeat:
+`uv run python scripts/test_persona_channels.py`.
+
+## Repo layout
+
+```
+agent/             Customer-facing runtime persona (SOUL, RULES, TOOLS, EXAMPLES)
+owner_agent/       Owner-facing persona — same shape
+src/               Application code (agents, bot, webhooks, mcp, workflows, storage, core)
+web/               Astro + Tailwind storefront with cart-aware chat widget
+tests/             pytest unit + integration + scenario YAML
+scripts/           run.sh, demo.sh, seed_marketing.py, test_persona_channels.py, …
+docs/              ARCHITECTURE link target, PLAN, specs, MCP inventory, DEMO, MARKETING_PLAN, SUBMISSION_EVIDENCE
+config/            .env.example, .mcp.json template
+assets/            Brand assets (palette, photography references)
+data/              Runtime artefacts (gitignored: state.db, scorecards, logs)
+HACKATHON_BRIEF.md The unsealed brief, verbatim
+HCU_BRANDBOOK.md   Brand voice, palette, hard rules — the runtime's source of truth
+```
+
+## Hackathon brief compliance (per `HACKATHON_BRIEF.md` §8)
+
+| Deliverable | Where |
+|---|---|
+| README, setup from a fresh clone | This file + `./scripts/run.sh` |
+| `ARCHITECTURE.md` — agents, routing, MCP usage, owner-bot mapping | `ARCHITECTURE.md` |
+| `.env.example` with placeholders only | `config/.env.example` |
+| Website / storefront instructions | `web/README.md` + `docs/DEMO.md` |
+| Production / local deploy notes | `docs/DEMO.md` |
+| Business-impact hypothesis + $500 marketing case | `docs/MARKETING_PLAN.md` |
+| Agent-friendly website notes | `web/public/agent.txt` + JSON-LD per page + `/api/catalog` |
+| On-site assistant test script | `docs/DEMO.md` + `scripts/test_persona_channels.py` |
+| Telegram bots and what each does | "Owner controls" table above |
+
+## License
+
+MIT — see `LICENSE`.

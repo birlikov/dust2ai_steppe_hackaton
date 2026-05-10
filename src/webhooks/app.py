@@ -29,9 +29,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from aiogram import Bot
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -39,7 +36,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.agents.claude_bridge import build_default_bridge
-from src.bot.markdown import tg_normalise
 from src.core.config import REPO_ROOT, get_settings
 from src.core.logging import get_logger
 from src.mcp.http_client import (
@@ -51,6 +47,7 @@ from src.mcp.http_client import (
 )
 from src.storage import drafts
 from src.storage.audit import record
+from src.webhooks.owner_notify import OrderNotifyPayload, notify_owner_of_order
 from src.webhooks.security import verify_signature
 from src.webhooks.storefront import (
     lookup_kitchen_product,
@@ -496,8 +493,14 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
 
         ready_at = payload.fulfillment.at_iso
 
-        await _notify_owner_of_order(
-            payload=payload,
+        await notify_owner_of_order(
+            payload=OrderNotifyPayload(
+                customer_name=payload.customer.name,
+                source=payload.source,
+                items=[(item.quantity, item.slug) for item in payload.items],
+                fulfillment_type=payload.fulfillment.type,
+                fulfillment_at_iso=payload.fulfillment.at_iso,
+            ),
             order_id=order_id,
             ticket_id=ticket_id,
             total_cents=total_cents,
@@ -629,73 +632,6 @@ def _compose_customer_note(payload: OrderRequest) -> str:
     if payload.fulfillment.notes:
         parts.append(payload.fulfillment.notes)
     return ". ".join(parts)
-
-
-_SOURCE_EMOJI: dict[str, str] = {
-    "website": "📦",
-    "agent": "🤖",
-    "whatsapp": "💬",
-    "instagram": "📸",
-    "telegram": "📨",
-    "walk-in": "🚶",
-}
-
-
-async def _notify_owner_of_order(
-    *,
-    payload: OrderRequest,
-    order_id: str,
-    ticket_id: str | None,
-    total_cents: int,
-    kitchen_status: str,
-) -> None:
-    """Push a one-line summary of the new order to the owner's Telegram.
-
-    Best-effort: failures (no owner paired, Telegram down, missing token)
-    log a warning and never block the customer order. Brand-correct cake
-    names + Telegram-classic Markdown bold (single asterisks).
-    """
-    try:
-        owner = await drafts.get_owner()
-        if owner is None:
-            return
-        token = get_settings().telegram_bot_token
-        if not token:
-            log.warning("order_notify.no_token")
-            return
-
-        emoji = _SOURCE_EMOJI.get(payload.source, "📦")
-        lines: list[str] = [f"{item.quantity}x {item.slug}" for item in payload.items]
-        body_parts = [
-            f"{emoji} *New order* — {payload.customer.name}",
-            ", ".join(lines),
-            (
-                f"*${total_cents / 100:,.2f}* · {payload.fulfillment.type}"
-                + (f" at {payload.fulfillment.at_iso}" if payload.fulfillment.at_iso else "")
-            ),
-            f"_order {order_id[:14]}_"
-            + (f" · _ticket {ticket_id[:14]}_" if ticket_id else ""),
-        ]
-        if kitchen_status == "kitchen_pending":
-            body_parts.append("_kitchen ticket pending — will retry shortly_")
-        body = "\n".join(body_parts)
-
-        # One-shot Bot — the polling bot lives in a separate process,
-        # so we open/close a fresh session per push.
-        bot = Bot(
-            token=token,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-        try:
-            await bot.send_message(
-                owner.telegram_chat_id,
-                tg_normalise(body),
-                parse_mode="Markdown",
-            )
-        finally:
-            await bot.session.close()
-    except Exception as exc:
-        log.warning("order_notify.failed", err=str(exc))
 
 
 def _extract_id(obj: Any, key: str) -> str | None:
