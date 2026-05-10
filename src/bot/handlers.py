@@ -50,7 +50,7 @@ HELP_TEXT = (
     "  /budget          — marketing budget + recent website leads (priority-scored)\n"
     "  /inbox           — posts waiting for your Approve / Edit / Reject\n"
     "  /notify          — set push cadence (tap a preset: 1m / 30m / 2h / off)\n"
-    "  /refund          — pick an order + queue a refund offer (or /refund <id>)\n"
+    "  /refund          — pick an order + queue a refund offer (or /refund ORDER_ID)\n"
     "  /drain_threads   — drain unanswered customer threads through the persona\n"
     "  /restart         — clear my conversation memory\n"
     "  /cancel          — cancel the current step\n"
@@ -81,7 +81,10 @@ async def cmd_help(message: Message, session_id: str) -> None:
         await message.answer(HELP_TEXT, parse_mode="Markdown")
     except Exception as exc:
         log.warning("help.markdown_failed", err=str(exc))
-        await message.answer(HELP_TEXT)
+        # Bot's default parse_mode is HTML; an HTML send of HELP_TEXT
+        # blows up on stray angle brackets / unsupported tags. Force
+        # plain text on the fallback so we always answer.
+        await message.answer(HELP_TEXT, parse_mode=None)
     await record("agent", "outbound", {"text": "help"}, session_id=session_id)
 
 
