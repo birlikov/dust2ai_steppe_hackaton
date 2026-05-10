@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     # run. Disable when running ``scripts/run_scenario.py`` against the
     # same team token to avoid two consumers racing on the same timeline.
     world_poller_enabled: bool = True
+
+    # --- Kitchen-staff side auto-loop (demo) ---
+    # Closes the order → ticket → accept → ready loop in real time so
+    # judges see the full POS+kitchen flow without needing a kitchen UI.
+    # Off by default — flip to ``true`` for the demo. Polls
+    # ``kitchen_list_tickets`` every ``kitchen_tick_s`` seconds;
+    # capacity-aware (rejects when remaining < ``kitchen_reject_threshold_min``).
+    kitchen_auto_demo: bool = False
+    kitchen_tick_s: float = 20.0
+    kitchen_reject_threshold_min: int = 30
+
     # If set, the bot only responds to chats paired by sending this exact
     # passphrase (or to the chat already in `owner_identity`). Unset → open
     # mode (dev / fresh-clone). Never commit a real value.

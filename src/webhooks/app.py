@@ -145,6 +145,15 @@ class OrderRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=120)
 
 
+class UpsellPairing(BaseModel):
+    """High-margin add-on suggestion shown after a successful order."""
+
+    slug: str
+    name: str
+    price_formatted: str
+    reason: str
+
+
 class OrderResponse(BaseModel):
     status: str
     order_id: str | None = None
@@ -153,6 +162,7 @@ class OrderResponse(BaseModel):
     total_usd: float | None = None
     estimated_lead_minutes: int | None = None
     message: str | None = None
+    pairings: list[UpsellPairing] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +199,30 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
         else:
             app.state.mcp_client = deps.mcp_client
             app.state.mcp_owns_client = False
+
+        # Late-bind the MCP client to the orchestrator so its
+        # repeat-customer enrichment (and any future MCP-aware step) can
+        # reach the live server without re-plumbing.
+        if (
+            getattr(app.state, "orchestrator", None) is not None
+            and app.state.mcp_client is not None
+            and getattr(app.state.orchestrator, "mcp", None) is None
+        ):
+            app.state.orchestrator.mcp = app.state.mcp_client
+
+        # Cache the margin-by-product map once at boot so /api/order can
+        # surface high-margin upsell pairings without a per-request MCP
+        # call. Best-effort: an empty cache just means no pairings.
+        app.state.margin_map = {}
+        if app.state.mcp_client is not None:
+            try:
+                margins = await call_with_retry(
+                    app.state.mcp_client, "marketing_get_margin_by_product", {}
+                )
+                app.state.margin_map = _normalize_margin_map(margins)
+                log.info("upsell.margin_map_loaded", n=len(app.state.margin_map))
+            except (McpTransportError, McpError) as exc:
+                log.warning("upsell.margin_map_failed", err=str(exc))
 
         try:
             yield
@@ -508,6 +542,14 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
             kitchen_status=kitchen_status,
         )
 
+        ordered_slugs = {item.slug for item in payload.items}
+        pairings = _compute_pairings(
+            margin_map=getattr(app.state, "margin_map", {}) or {},
+            catalog=catalog,
+            ordered_slugs=ordered_slugs,
+            limit=2,
+        )
+
         return JSONResponse(
             content=OrderResponse(
                 status=kitchen_status,
@@ -521,6 +563,7 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
                     if kitchen_status == "confirmed"
                     else "Order recorded; the kitchen ticket will be created shortly."
                 ),
+                pairings=pairings,
             ).model_dump(exclude_none=True)
         )
 
@@ -609,6 +652,118 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
 
 def _new_external_id() -> str:
     return str(uuid.uuid4())
+
+
+# ---------------------------------------------------------------------------
+# Upsell pairings (powered by ``marketing_get_margin_by_product``)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_margin_map(raw: Any) -> dict[str, float]:
+    """Coerce the MCP response into ``{slug: margin_pct}``.
+
+    The simulator's response shape isn't formally fixed; we accept any
+    of these patterns and silently drop fields that don't fit:
+
+    - ``{"items": [{"slug": "…", "marginPct": 0.42}, …]}``
+    - ``{"items": [{"kitchenProductId": "…", "margin": 0.42}, …]}``
+    - ``{"products": [{"slug": "…", "margin_pct": 42}, …]}``  (percent)
+    - ``{"by_slug": {"slug": 0.42, …}}``
+    """
+    out: dict[str, float] = {}
+    if not isinstance(raw, dict):
+        return out
+    items = raw.get("items") or raw.get("products")
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            slug = str(
+                item.get("slug")
+                or item.get("kitchenProductId")
+                or item.get("variationId")
+                or ""
+            ).strip()
+            margin = (
+                item.get("marginPct")
+                or item.get("margin_pct")
+                or item.get("margin")
+                or 0
+            )
+            try:
+                margin_f = float(margin)
+            except (TypeError, ValueError):
+                continue
+            # Normalize 0-100 percent inputs to 0-1 fraction.
+            if margin_f > 1:
+                margin_f = margin_f / 100.0
+            if slug and 0 <= margin_f <= 1:
+                out[slug] = margin_f
+    by_slug = raw.get("by_slug")
+    if isinstance(by_slug, dict):
+        for slug, margin in by_slug.items():
+            try:
+                margin_f = float(margin)
+            except (TypeError, ValueError):
+                continue
+            if margin_f > 1:
+                margin_f = margin_f / 100.0
+            if slug and 0 <= margin_f <= 1:
+                out[str(slug)] = margin_f
+    return out
+
+
+def _compute_pairings(
+    *,
+    margin_map: dict[str, float],
+    catalog: dict[str, Any],
+    ordered_slugs: set[str],
+    limit: int = 2,
+) -> list[UpsellPairing]:
+    """Pick up to ``limit`` high-margin items not already in the cart.
+
+    Falls back to a deterministic catalog-order pick if the margin map
+    is empty (so the demo still surfaces something sensible offline).
+    """
+    products = [
+        p
+        for p in catalog.get("products", [])
+        if isinstance(p, dict) and p.get("slug") not in ordered_slugs
+    ]
+    if not products:
+        return []
+
+    if margin_map:
+        ranked = sorted(
+            products,
+            key=lambda p: margin_map.get(str(p.get("slug")), 0.0),
+            reverse=True,
+        )
+        have_margins = True
+    else:
+        ranked = products
+        have_margins = False
+
+    out: list[UpsellPairing] = []
+    for product in ranked[:limit]:
+        slug = str(product.get("slug") or "")
+        if not slug:
+            continue
+        margin_pct = margin_map.get(slug, 0.0)
+        reason = (
+            f"high-margin pick ({round(margin_pct * 100)}% margin)"
+            if have_margins
+            else "often paired"
+        )
+        out.append(
+            UpsellPairing(
+                slug=slug,
+                name=str(product.get("name") or slug),
+                price_formatted=str(product.get("priceFormatted") or ""),
+                reason=reason,
+            )
+        )
+    return out
 
 
 # ---------------------------------------------------------------------------

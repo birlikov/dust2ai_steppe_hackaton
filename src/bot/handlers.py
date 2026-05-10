@@ -46,12 +46,14 @@ HELP_TEXT = (
     "  • \"how's the kitchen?\"\n"
     "  • \"what's pending my approval?\"\n\n"
     "Or use a shortcut:\n"
-    "  /dashboard  — today's sales + kitchen + what's urgent\n"
-    "  /budget     — marketing budget + recent website leads\n"
-    "  /inbox      — posts waiting for your Approve / Edit / Reject\n"
-    "  /notify     — set push cadence (tap a preset: 1m / 30m / 2h / off)\n"
-    "  /restart    — clear my conversation memory\n"
-    "  /cancel     — cancel the current step\n"
+    "  /dashboard       — today's sales + kitchen + what's urgent\n"
+    "  /budget          — marketing budget + recent website leads (priority-scored)\n"
+    "  /inbox           — posts waiting for your Approve / Edit / Reject\n"
+    "  /notify          — set push cadence (tap a preset: 1m / 30m / 2h / off)\n"
+    "  /refund <id>     — queue a refund offer for an order id\n"
+    "  /wire_webhooks   — register Meta WhatsApp + Instagram webhooks at a URL\n"
+    "  /restart         — clear my conversation memory\n"
+    "  /cancel          — cancel the current step\n"
 )
 
 HISTORY_CAP = 24  # last N user/assistant text turns persisted per session

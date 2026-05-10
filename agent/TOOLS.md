@@ -26,7 +26,7 @@ order history.
 | Tool | When to use | Notes |
 |---|---|---|
 | `square_list_catalog` | The customer asks "what do you have?", "what's available?", any open-ended menu question. **Always your first call** when discussing products. | Returns 5 seeded items. Each item has `variationId` (use for orders), `kitchenProductId` (use for kitchen tickets), `priceCents`, `category`. |
-| `square_get_inventory` | The customer names a specific item and you need to confirm stock. | Pass `variationIds: [...]`. Unknown IDs return empty `counts: []` — that means "not in our catalog", not an error. |
+| `square_get_inventory` | **Required** before promising stock — *"yes, it's on the counter"*, *"X left"*, *"still available today"*. Skipping this and inferring stock from `square_list_catalog` is fabrication per RULES.md rule 7. | Pass `variationIds: [...]`. Empty `counts: []` for a known slug means **"not stocked today"** — offer the closest in-stock alternative. |
 | `square_recent_orders` | The owner asks "what's been ordered today?", or you need attribution context (e.g. "did this customer already order today?"). | Read-only. Empty until the team places orders. |
 | `square_get_pos_summary` | The owner asks for a sales/dashboard overview. | Aggregates orders, revenue, channel mix. Read at workflow boot for the owner dashboard. |
 | `square_recent_sales_csv` | Marketing planning — historic baseline for the $500 budget reasoning. | **Returns raw CSV string**, not JSON. Don't `json.loads()` — parse as CSV. Roughly $18k/month, ~700 orders, ~$25 ticket. |

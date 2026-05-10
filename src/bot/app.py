@@ -26,6 +26,7 @@ from src.core.logging import get_logger
 from src.mcp.http_client import HappycakeMcpClient, build_default_client
 from src.storage import db
 from src.workflows.orchestrator import Orchestrator
+from src.world.kitchen_runner import KitchenRunner
 from src.world.runner import WorldRunner
 
 log = get_logger(__name__)
@@ -37,6 +38,8 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="budget", description="Marketing budget + recent leads"),
     BotCommand(command="inbox", description="Items waiting for your Approve / Edit / Reject"),
     BotCommand(command="notify", description="Set push cadence (tap a preset)"),
+    BotCommand(command="refund", description="Draft a refund for an order id"),
+    BotCommand(command="wire_webhooks", description="Register Meta WA + IG webhooks at a URL"),
     BotCommand(command="cancel", description="Cancel the current step"),
     BotCommand(command="restart", description="Wipe conversation memory"),
     BotCommand(command="logout", description="Unpair this chat from the owner role"),
@@ -70,7 +73,7 @@ def build_dispatcher() -> Dispatcher:
     return dp
 
 
-async def run_polling(
+async def run_polling(  # noqa: PLR0912, PLR0915 — main entry point: many concerns by design
     bridge: ClaudeBridge | None = None,
     owner_bridge: ClaudeBridge | None = None,
     mcp: HappycakeMcpClient | None = None,
@@ -101,6 +104,8 @@ async def run_polling(
     notifier_task: asyncio.Task[None] | None = None
     poller_runner: WorldRunner | None = None
     poller_task: asyncio.Task[None] | None = None
+    kitchen_runner: KitchenRunner | None = None
+    kitchen_task: asyncio.Task[None] | None = None
     if mcp is not None:
         notifier_task = asyncio.create_task(
             bot_notifier.run(
@@ -120,7 +125,7 @@ async def run_polling(
         if settings.world_poller_enabled:
             poller_runner = WorldRunner(
                 mcp=mcp,
-                orchestrator=Orchestrator(bridge=bridge),
+                orchestrator=Orchestrator(bridge=bridge, mcp=mcp),
             )
             poller_task = asyncio.create_task(
                 poller_runner.run(),
@@ -129,6 +134,24 @@ async def run_polling(
             log.info("world.poller.scheduled")
         else:
             log.info("world.poller.disabled", reason="WORLD_POLLER_ENABLED=0")
+
+        if settings.kitchen_auto_demo:
+            kitchen_runner = KitchenRunner(
+                mcp=mcp,
+                tick_s=settings.kitchen_tick_s,
+                reject_threshold_min=settings.kitchen_reject_threshold_min,
+            )
+            kitchen_task = asyncio.create_task(
+                kitchen_runner.run(),
+                name="kitchen-runner",
+            )
+            log.info(
+                "kitchen.auto_demo.scheduled",
+                tick_s=settings.kitchen_tick_s,
+                reject_threshold_min=settings.kitchen_reject_threshold_min,
+            )
+        else:
+            log.info("kitchen.auto_demo.disabled", reason="KITCHEN_AUTO_DEMO=0")
 
     try:
         if mcp is not None:
@@ -147,6 +170,12 @@ async def run_polling(
                 owner_bridge=owner_bridge,
             )
     finally:
+        if kitchen_runner is not None:
+            kitchen_runner.stop()
+        if kitchen_task is not None and not kitchen_task.done():
+            kitchen_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await kitchen_task
         if poller_runner is not None:
             poller_runner.stop()
         if poller_task is not None and not poller_task.done():

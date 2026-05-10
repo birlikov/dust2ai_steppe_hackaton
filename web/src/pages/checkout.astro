@@ -117,6 +117,11 @@ import BaseLayout from "../layouts/BaseLayout.astro";
         — kitchen ticket <code id="success-ticket" class="bg-cream-100 px-2 py-0.5 text-xs"></code>.
       </p>
       <p class="text-text-primary text-sm mb-6" id="success-message"></p>
+      <!-- Upsell pairings — rendered when /api/order returns suggestions -->
+      <div id="success-pairings" class="hidden mb-8 mx-auto max-w-md">
+        <p class="cake-name-label text-happy-blue-700 mb-3">◆ Often added with this order</p>
+        <ul id="success-pairings-list" class="list-none m-0 p-0 space-y-2 text-sm"></ul>
+      </div>
       <p class="text-sm text-text-primary">
         Order on the site at happycake.us or send a message on WhatsApp.
       </p>
@@ -262,6 +267,29 @@ import BaseLayout from "../layouts/BaseLayout.astro";
             document.getElementById("success-order").textContent = data.order_id || "—";
             document.getElementById("success-ticket").textContent = data.ticket_id || "—";
             document.getElementById("success-message").textContent = data.message || "";
+            // Render upsell pairings if /api/order returned any
+            var pairings = (data && data.pairings) || [];
+            if (pairings.length > 0) {
+              var listEl = document.getElementById("success-pairings-list");
+              listEl.innerHTML = "";
+              pairings.forEach(function (p) {
+                var li = document.createElement("li");
+                li.className = "card-border bg-cream-100 p-3 text-left flex items-baseline justify-between gap-3";
+                var left = document.createElement("div");
+                left.innerHTML =
+                  '<a href="/cake/' + encodeURIComponent(p.slug) + '" class="font-body font-medium text-happy-blue-900 no-underline">' +
+                  (p.name || p.slug) +
+                  "</a>" +
+                  '<p class="text-xs text-text-primary opacity-70 mt-0.5">' + (p.reason || "") + "</p>";
+                var right = document.createElement("span");
+                right.className = "font-body font-medium text-sm text-happy-blue-900 whitespace-nowrap";
+                right.textContent = p.price_formatted || "";
+                li.appendChild(left);
+                li.appendChild(right);
+                listEl.appendChild(li);
+              });
+              document.getElementById("success-pairings").classList.remove("hidden");
+            }
             form.parentElement.classList.add("hidden");
             document.getElementById("checkout-success").classList.remove("hidden");
             window.scrollTo(0, 0);

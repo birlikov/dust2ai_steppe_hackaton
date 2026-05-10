@@ -25,6 +25,12 @@ from typing import Any
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.core.logging import get_logger
 from src.core.voice import LintRequest, Violation, lint
+from src.mcp.http_client import (
+    HappycakeMcpClient,
+    McpError,
+    McpTransportError,
+    call_with_retry,
+)
 from src.storage import drafts, sessions
 from src.storage.audit import record
 
@@ -61,6 +67,79 @@ def _is_escalation_promise(text: str) -> bool:
     return any(p.search(text) for p in _ESCALATION_PATTERNS)
 
 
+async def _maybe_repeat_customer_context(
+    mcp: HappycakeMcpClient | None,
+    request: TurnRequest,
+    session_id: str,
+) -> str:
+    """Look up recent orders for this customer; return a short context
+    prefix the persona can use for a warmer reply, or ``""`` if there's
+    nothing to add.
+
+    Match strategy: scan the most recent ``MAX_ORDERS_LOOKBACK`` orders
+    and return the first one whose ``customerName`` or ``customerNote``
+    contains the request's ``external_id`` (phone, IG handle, etc.).
+    Loose by design — this is a UX warm-up, not a billing key.
+    """
+    if mcp is None or not request.external_id:
+        return ""
+    try:
+        result = await call_with_retry(
+            mcp, "square_recent_orders", {"limit": MAX_ORDERS_LOOKBACK}
+        )
+    except (McpTransportError, McpError) as exc:
+        log.warning("orchestrator.recent_orders_failed", err=str(exc))
+        return ""
+
+    orders: list[dict[str, Any]] = []
+    if isinstance(result, dict):
+        raw = result.get("orders")
+        if isinstance(raw, list):
+            orders = [o for o in raw if isinstance(o, dict)]
+    if not orders:
+        return ""
+
+    needle = request.external_id.lower()
+    for order in orders:
+        haystack = " ".join(
+            str(order.get(k) or "") for k in ("customerName", "customerNote", "source")
+        ).lower()
+        if needle and needle in haystack:
+            items = order.get("items") or []
+            first_slug = ""
+            if isinstance(items, list) and items and isinstance(items[0], dict):
+                first_slug = str(items[0].get("slug") or items[0].get("name") or "")
+            created = str(order.get("createdAt") or order.get("ts") or "")[:10]
+            await record(
+                "system",
+                "note",
+                {
+                    "kind": "repeat_customer_detected",
+                    "external_id": request.external_id,
+                    "last_slug": first_slug,
+                    "last_at": created,
+                },
+                session_id=session_id,
+            )
+            parts = ["[Internal context — do not quote verbatim:"]
+            parts.append("repeat_customer: true")
+            if first_slug:
+                parts.append(f"last_order: {first_slug}")
+            if created:
+                parts.append(f"last_seen: {created}")
+            parts.append(
+                "Greet warmly with a short callback to the prior order if relevant.]"
+            )
+            return " ".join(parts)
+    return ""
+
+
+# How many recent orders to scan for the repeat-customer match. The
+# simulator's ``square_recent_orders`` is per-team-token; 10 is plenty
+# for the demo and keeps the latency under ~300 ms.
+MAX_ORDERS_LOOKBACK = 10
+
+
 @dataclass(slots=True)
 class TurnRequest:
     channel: str  # website | whatsapp | instagram | telegram | gb
@@ -84,6 +163,11 @@ class OrchestratorError(RuntimeError):
 @dataclass(slots=True)
 class Orchestrator:
     bridge: ClaudeBridge
+    # Optional MCP client used for context-enrichment (repeat-customer
+    # detection via ``square_recent_orders``). When None we silently skip
+    # the enrichment — the bridge still runs, just without the context
+    # block prepended. Pass it from FastAPI / bot lifespan.
+    mcp: HappycakeMcpClient | None = None
 
     async def run(self, request: TurnRequest) -> TurnReply:
         session = await sessions.get_or_create(request.channel, request.external_id)
@@ -96,8 +180,22 @@ class Orchestrator:
             session_id=session.id,
         )
 
+        # Repeat-customer welcome — if we have any prior orders for this
+        # external_id, tell the persona about the most recent so it can
+        # warm up the reply naturally ("welcome back, the same cake
+        # 'Honey' as last time?"). Best-effort: any failure logs and
+        # the original user message goes through unchanged.
+        prepended_context = await _maybe_repeat_customer_context(
+            self.mcp, request, session.id
+        )
+        bridge_message = (
+            f"{prepended_context}\n\n{request.user_message}"
+            if prepended_context
+            else request.user_message
+        )
+
         try:
-            raw_reply = await self.bridge.query(request.user_message, history=history)
+            raw_reply = await self.bridge.query(bridge_message, history=history)
         except ClaudeBridgeError as exc:
             log.error(
                 "orchestrator.bridge_failed",

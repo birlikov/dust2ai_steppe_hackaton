@@ -199,7 +199,7 @@ Order flow (when the runtime persona accepts an order in chat):
 2. Runtime calls `kitchen_get_capacity` (and where product-specific timing matters, `kitchen_get_menu_constraints`) — this is the **kitchen-capacity precondition** in `agent/RULES.md` rule 7.
 3. Runtime calls `square_create_order` with `items[{variationId, quantity}]`, `source` (`whatsapp` | `instagram` | `website` | `walk-in` | `agent`), and `customerName`. Returns `orderId`.
 4. Runtime calls `kitchen_create_ticket` with `orderId`, `customerName`, `items[{productId, quantity}]` — **`productId` ≠ `variationId`** (mapping via `kitchenProductId` in catalog).
-5. Kitchen-side flow (out of scope for the runtime; owner / dispatcher drives it): `kitchen_accept_ticket` → `kitchen_mark_ready` (or `kitchen_reject_ticket` if infeasible).
+5. Kitchen-side flow: in production this is the kitchen staff. For the demo, an opt-in `KitchenRunner` (`src/world/kitchen_runner.py`, gated by `KITCHEN_AUTO_DEMO=true`) closes the loop automatically — polls `kitchen_list_tickets`, calls `kitchen_accept_ticket` (or `kitchen_reject_ticket` when remaining capacity is tight), and `kitchen_mark_ready` once the nominal lead time has elapsed.
 6. **Owner notification (best-effort):** after step 4 succeeds (or `kitchen_pending` when step 4 fails) `_notify_owner_of_order` in `src/webhooks/app.py` opens a one-shot aiogram `Bot`, looks up the paired owner in `owner_identity`, and sends a one-line summary with channel-aware emoji (`📦 website`, `💬 whatsapp`, `📸 instagram`, `🤖 agent`, `🚶 walk-in`), brand-correct cake names, total, and pickup/delivery time. Failures log a warning and never block the customer order.
 
 The runtime never short-circuits step 2. The brand-voice linter
@@ -281,7 +281,20 @@ connection.
 - Pre-commit hook (in `.git/hooks/pre-commit`) runs all three before allowing a commit
 - `web/`: `npm run build` exits 0, `tsc --noEmit` clean
 
-## 11. What's deliberately out of scope
+## 11. MCP coverage — every tool, mapped
+
+The simulator exposes 55 tools across 8 families. We integrate every
+one of them across production, runners, on-demand commands, and demo
+scripts. The full table — tool → status → call site, plus a "tools we
+wish existed" subsection naming the gaps and our workarounds — is in
+**`docs/MCP_COVERAGE.md`**.
+
+Headline: 38 tools called in production code paths, 9 called by demo
+scripts or owner Telegram commands, 8 documented as deliberate skips
+(read-back utilities the simulator's own `mcp_audit_log` already
+covers, etc.). Nothing in the inventory is silently ignored.
+
+## 12. What's deliberately out of scope
 
 - Real Square / Stripe / payment integration (brief §4 forbids real payment credentials).
 - Real Meta / Google Ads spend (brief §4; we run through `marketing_*` simulator).
@@ -290,7 +303,7 @@ connection.
 - LLM fine-tuning (brief: Opus 4.7 + good prompts + tools is the standard).
 - Microservices / k8s / multi-region (single process, single host).
 
-## 12. Repository layout
+## 13. Repository layout
 
 ```
 agent/        Runtime persona — composed system prompt for `claude -p`

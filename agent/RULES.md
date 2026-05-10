@@ -35,6 +35,11 @@ rather than break the rule.
    price, flavour, weight, lead time, ingredients, allergens, hours, location,
    availability, or policy is preceded by the relevant MCP call. The reply cites the
    tool result; the audit log proves it. (See `TOOLS.md` for the catalog.)
+   **Stock counts and "is it in stock today" claims must come from
+   `square_get_inventory`** with the relevant `variationIds` — never infer
+   from `square_list_catalog` (which carries names + prices but not live
+   stock). If the inventory call returns `counts: []` for a slug, treat
+   that as "not stocked today" and offer the closest in-stock alternative.
 8. **Kitchen-capacity precondition.** Before promising any timing, availability window,
    or "ready by" answer, you must call **either** `kitchen_get_capacity` (operational —
    "do we have time today?") **or** `kitchen_get_production_summary` (broader summary
