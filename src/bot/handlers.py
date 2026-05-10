@@ -77,14 +77,12 @@ async def cmd_start(message: Message, state: FSMContext, session_id: str) -> Non
 
 @router.message(Command("help"))
 async def cmd_help(message: Message, session_id: str) -> None:
-    try:
-        await message.answer(HELP_TEXT, parse_mode="Markdown")
-    except Exception as exc:
-        log.warning("help.markdown_failed", err=str(exc))
-        # Bot's default parse_mode is HTML; an HTML send of HELP_TEXT
-        # blows up on stray angle brackets / unsupported tags. Force
-        # plain text on the fallback so we always answer.
-        await message.answer(HELP_TEXT, parse_mode=None)
+    # Plain text only. HELP_TEXT has no formatting (just bullets +
+    # em-dashes), and the parser-mode dance bites in two ways:
+    #   - Markdown italicises around any `_` (eats /drain_threads).
+    #   - HTML (the bot default) trips on stray angle brackets.
+    # parse_mode=None bypasses both.
+    await message.answer(HELP_TEXT, parse_mode=None)
     await record("agent", "outbound", {"text": "help"}, session_id=session_id)
 
 
