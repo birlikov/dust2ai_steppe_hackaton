@@ -21,6 +21,7 @@ from src.bot.handlers import router as commands_router
 from src.bot.middleware import AuditMiddleware
 from src.bot.owner_commands import router as owner_router
 from src.bot.storage import SqliteFsmStorage
+from src.channels.poller import ChannelRunner
 from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.mcp.http_client import HappycakeMcpClient, build_default_client
@@ -107,6 +108,8 @@ async def run_polling(  # noqa: PLR0912, PLR0915 — main entry point: many conc
     notifier_task: asyncio.Task[None] | None = None
     poller_runner: WorldRunner | None = None
     poller_task: asyncio.Task[None] | None = None
+    channels_runner: ChannelRunner | None = None
+    channels_task: asyncio.Task[None] | None = None
     kitchen_runner: KitchenRunner | None = None
     kitchen_task: asyncio.Task[None] | None = None
     if mcp is not None:
@@ -137,6 +140,23 @@ async def run_polling(  # noqa: PLR0912, PLR0915 — main entry point: many conc
             log.info("world.poller.scheduled")
         else:
             log.info("world.poller.disabled", reason="WORLD_POLLER_ENABLED=0")
+
+        if settings.channels_poller_enabled:
+            channels_runner = ChannelRunner(
+                mcp=mcp,
+                orchestrator=Orchestrator(bridge=bridge, mcp=mcp),
+                interval_s=settings.channels_poller_interval_s,
+            )
+            channels_task = asyncio.create_task(
+                channels_runner.run(),
+                name="channels-poller",
+            )
+            log.info(
+                "channels.poller.scheduled",
+                interval_s=settings.channels_poller_interval_s,
+            )
+        else:
+            log.info("channels.poller.disabled", reason="CHANNELS_POLLER_ENABLED=0")
 
         if settings.kitchen_auto_demo:
             kitchen_runner = KitchenRunner(
@@ -185,6 +205,12 @@ async def run_polling(  # noqa: PLR0912, PLR0915 — main entry point: many conc
             poller_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await poller_task
+        if channels_runner is not None:
+            channels_runner.stop()
+        if channels_task is not None and not channels_task.done():
+            channels_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await channels_task
         if notifier_task is not None and not notifier_task.done():
             notifier_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

@@ -65,6 +65,17 @@ class Settings(BaseSettings):
     # same team token to avoid two consumers racing on the same timeline.
     world_poller_enabled: bool = True
 
+    # --- Always-on channel poller ---
+    # Drains direct channel inbounds (whatsapp_list_threads,
+    # instagram_list_dm_threads, gb_list_pending_reviews) that arrive outside
+    # the world-engine queue — e.g., messages injected via
+    # ``whatsapp_inject_inbound`` go to ``whatsapp_list_threads`` without
+    # entering ``world_next_event``. Without this loop those inbounds sit
+    # unanswered. Sets per-channel high-water marks at startup so existing
+    # stale messages are NOT replayed.
+    channels_poller_enabled: bool = True
+    channels_poller_interval_s: float = 30.0
+
     # --- Kitchen-staff side auto-loop (demo) ---
     # Closes the order → ticket → accept → ready loop in real time so
     # judges see the full POS+kitchen flow without needing a kitchen UI.
