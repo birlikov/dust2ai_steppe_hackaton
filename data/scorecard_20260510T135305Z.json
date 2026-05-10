@@ -1,0 +1,90 @@
+{
+  "scenario": "launch-day-revenue-engine",
+  "started": {
+    "status": "started",
+    "run": {
+      "scenarioId": "launch-day-revenue-engine",
+      "name": "Launch day revenue engine",
+      "seed": 9100510,
+      "timeCompression": "1 simulator hour = 10 real minutes",
+      "currentMinute": 0,
+      "eventCursor": 0,
+      "startedAt": "2026-05-10T13:53:03.257Z"
+    },
+    "deterministic": true
+  },
+  "events_processed": 6,
+  "finished": true,
+  "ranAt": "2026-05-10T13:53:04.282187+00:00",
+  "evaluator_score_world_scenario": {
+    "dimension": "world scenario execution",
+    "score": 100,
+    "maxScore": 100,
+    "evidence": [
+      "Scenario started",
+      "8 event(s) in timeline",
+      "6 event(s) delivered",
+      "200 recent MCP call(s) in mcp_audit_log"
+    ],
+    "gaps": []
+  },
+  "evaluator_score_pos_kitchen_flow": {
+    "dimension": "POS + kitchen handoff",
+    "score": 100,
+    "maxScore": 100,
+    "evidence": [
+      "9 Square/POS simulator order(s)",
+      "9 kitchen ticket(s)",
+      "0 accepted, 0 ready, 0 rejected/escalated"
+    ],
+    "gaps": [
+      "No capacity-aware accept/reject decision",
+      "No ready-for-pickup completion evidence"
+    ]
+  },
+  "evaluator_score_channel_response": {
+    "dimension": "channel response",
+    "score": 100,
+    "maxScore": 100,
+    "evidence": [
+      "20 WhatsApp inbound event(s)",
+      "0 WhatsApp response(s)",
+      "0 Instagram action(s)",
+      "0 Google review(s), 0 proposed reply/replies"
+    ],
+    "gaps": [
+      "No WhatsApp response evidence",
+      "No Instagram handling evidence",
+      "No Google Business review reply evidence"
+    ]
+  },
+  "evaluator_score_marketing_loop": {
+    "dimension": "marketing loop",
+    "score": 100,
+    "maxScore": 100,
+    "evidence": [
+      "4 campaign(s) created",
+      "6 simulated lead(s) generated/routed",
+      "3 owner report(s) recorded",
+      "9 POS-style order(s) available for attribution"
+    ],
+    "gaps": []
+  },
+  "evaluator_get_evidence_summary": {
+    "policy": "No real credentials. Evaluator scores simulated state, audit trail, repo output, and website behavior.",
+    "websiteArtifact": "happycake.us production candidate is scored separately by judges/browser checks.",
+    "counts": {
+      "worldEvents": 8,
+      "marketingCampaigns": 4,
+      "marketingLeads": 6,
+      "squareOrders": 9,
+      "kitchenTickets": 9,
+      "whatsappInbound": 20,
+      "whatsappOutbound": 0,
+      "instagramActions": 0,
+      "gbusinessReviews": 0,
+      "gbusinessReplies": 0,
+      "auditCalls": 200
+    }
+  }
+}
