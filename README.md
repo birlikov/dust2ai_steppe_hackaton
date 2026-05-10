@@ -22,7 +22,8 @@ exercised by the runtime persona; none use canned answers.
    in a live MCP tool call (or it refuses cleanly).
 2. **Owner cockpit on Telegram** — DM your bot, send `/start` (with the
    `OWNER_PASSPHRASE` if you set one), then try `/dashboard`, `/budget`,
-   `/inbox`, `/notify 30m`, or any free-text question. Replies are
+   `/inbox`, `/notify` (tap a preset to set the push cadence), or any
+   free-text question. Replies are
    MCP-grounded too.
 3. **Persona-driven channel coverage** — `uv run python
    scripts/test_persona_channels.py` puts a real customer message on
@@ -131,7 +132,7 @@ The command set is identical.
 | `/dashboard` | One-screen view: today's sales mix, kitchen utilisation, urgent items, drafts pending. |
 | `/budget` | Marketing budget remaining + recent attributed leads. |
 | `/inbox` (alias `/drafts`) | Marketing posts queued for Approve / Edit / Reject. Survives bot restart (SQLite). |
-| `/notify` | Set push interval (`/notify 1m`, `/notify 30m`, `/notify 2h`, `/notify off`, `/notify on`). |
+| `/notify` | Set push cadence. Plain `/notify` shows current setting + an inline keyboard (1 min / 30 min / 2 h / Off / Default — current option ✓-marked). Text args (`/notify 30m`, `/notify off`) still work. |
 | `/cancel` | Cancel the current step. |
 | `/restart` | Wipe conversation memory for this chat. |
 

@@ -49,6 +49,7 @@ HELP_TEXT = (
     "  /dashboard  — today's sales + kitchen + what's urgent\n"
     "  /budget     — marketing budget + recent website leads\n"
     "  /inbox      — posts waiting for your Approve / Edit / Reject\n"
+    "  /notify     — set push cadence (tap a preset: 1m / 30m / 2h / off)\n"
     "  /restart    — clear my conversation memory\n"
     "  /cancel     — cancel the current step\n"
 )

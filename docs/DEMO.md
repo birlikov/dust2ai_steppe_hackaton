@@ -173,7 +173,7 @@ In the browser at `http://localhost:4321`:
 | Functional Tester (customer scenarios) | The on-site widget, world events, and Telegram free-text all route through the orchestrator and never hardcode answers |
 | Agent-friendliness auditor | `web/` exposes JSON-LD per product, `/catalog.json`, `/policies` JSON, `/sitemap.xml`, predictable URLs |
 | On-site assistant evaluator | The chat widget at `web/public/chat-widget.js` posts to `/api/chat`; replies are MCP-grounded |
-| Operator UX (Telegram) | `/dashboard`, `/budget`, `/inbox` (with inline keyboard), `/help`, `/cancel`, `/restart` — all replies acknowledge within ~2 s |
+| Operator UX (Telegram) | `/dashboard`, `/budget`, `/inbox` (Approve/Edit/Reject inline keyboard), `/notify` (1m/30m/2h/Off/Default tap-to-pick keyboard), `/help`, `/cancel`, `/restart` — all replies acknowledge within ~2 s |
 | Code reviewer | `git log` shows scoped conventional commits per phase; `pyproject.toml` runs ruff + mypy --strict + pytest at every commit (pre-commit hook) |
 | Business analyst | `docs/MARKETING_PLAN.md` carries the $500 reasoning with margin/AOV/conversion math and Sugar Land context |
 
