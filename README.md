@@ -72,7 +72,7 @@ Required values in `.env`:
 | `TELEGRAM_BOT_TOKEN` | DM `@BotFather` on Telegram → `/newbot` → follow prompts. Note the username it gives you (`@your_bot_handle`) — that's the bot you'll DM. | ✓ |
 | `SBC_TEAM_TOKEN` | Steppe Business Club hackathon dashboard at <https://www.steppebusinessclub.com/hackathon>. | ✓ |
 | `NGROK_AUTHTOKEN` | <https://dashboard.ngrok.com/get-started/your-authtoken> (free tier is fine). | strongly recommended |
-| `OWNER_PASSPHRASE` | Pick any hard-to-guess string. **If left empty, the bot is in open-pair mode and pairs with the first chat that sends `/start`** — fine for fresh-clone evaluation. | optional |
+| `OWNER_PASSPHRASE` | **Leave empty** for fresh-clone evaluation — open-pair mode means the first `/start` pairs your chat. Set to a hard-to-guess string only if you want to gate access (the team's hosted demo at `@happycake_agent_bot` uses the published passphrase from the **Live demo** section above). | optional |
 | `OWNER_CHAT_ID` | Auto-captured on first paired `/start`; you can leave it blank. | optional |
 
 `./scripts/run.sh` then validates `.env`, regenerates `.mcp.json`,
@@ -94,6 +94,27 @@ If the team's tunnel is still up at evaluation time:
 | Live catalog (MCP-backed) | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/api/catalog> |
 | Static catalog (build-time fallback) | <https://c2d0-2606-a300-9008-2a4f-87f1-9f2c-1d82-544b.ngrok-free.app/catalog.json> |
 | Telegram owner bot | `@happycake_agent_bot` |
+
+### Pairing your Telegram chat with the team's bot
+
+The team's hosted bot uses a published passphrase so judges can DM it cold:
+
+1. Open Telegram → DM **@happycake_agent_bot**
+2. Send a message that is exactly: `happycake-judge-2026`
+3. The bot replies *"Paired."* and the chat is now the authorised owner.
+4. Try `/dashboard`, `/budget`, `/inbox`, `/notify`, `/refund`, `/drain_threads`,
+   or just type a free-text question (*"sales today?"*, *"anything urgent?"*).
+
+**Pairing is single-seat**: the schema (`owner_identity` table with
+`CHECK (id = 1)`) holds at most one paired chat at a time, so the most
+recent passphrase send replaces any prior pair. If you and another
+judge want to evaluate concurrently, run the **Quickstart** below to
+get your own bot from a fresh clone — it's faster than coordinating
+re-pairs. The passphrase is intentionally public for evaluation; the
+simulator is sandboxed per team token so a random pair-hijacker can't
+reach real customer data.
+
+To unpair, send `/logout`. Re-pair with the same passphrase any time.
 
 > **ngrok-free URLs rotate** when `./scripts/run.sh` restarts. If the
 > link 502s, run the Quickstart locally — your own URL appears in the

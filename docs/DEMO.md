@@ -13,6 +13,11 @@ cp config/.env.example .env
 # want the bot to gate on that phrase before responding.
 ```
 
+Leave `OWNER_PASSPHRASE` empty for the fastest path — open-pair mode means
+your first `/start` to your bot pairs you immediately. Set a value only
+if you want to gate access (and document the value somewhere your judges
+can find it).
+
 The runtime persona requires the **`claude` CLI** (Claude Code) on
 PATH and **`ngrok`** with `NGROK_AUTHTOKEN` configured. Both are
 available on the hackathon-prepared environment; on a clean machine

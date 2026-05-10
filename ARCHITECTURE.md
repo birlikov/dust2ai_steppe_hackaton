@@ -181,6 +181,33 @@ FSM state persists in `data/state.db` (`fsm_state` table) so a process
 restart doesn't lose mid-flow context. Every inbound message goes through
 `AuditMiddleware` which records to `audit_log`.
 
+### Pairing & access control
+
+`src/bot/auth.py::AuthMiddleware` gates every aiogram update on
+`OWNER_PASSPHRASE`. Behaviour:
+
+- **Unset (default)** — open-pair mode. The first `/start` writes the
+  chat id to `owner_identity` and the chat is paired forever (or until
+  `/logout`). Right default for fresh-clone judges running their own
+  bot — no extra setup.
+- **Set** — every inbound update first checks `owner_identity` for the
+  chat id; if present, the update flows through. Otherwise, if the
+  inbound text equals the passphrase verbatim, the chat is paired and
+  the update flows through (a single message both pairs and acts).
+  Anything else is refused with a human-readable *"Locked — pair via
+  passphrase first."*
+
+The schema is **single-seat by design** — `owner_identity` is
+declared with `CHECK (id = 1)` so only one chat is paired at a time,
+and a fresh passphrase pair via `remember_owner` does an
+`ON CONFLICT(id) DO UPDATE` that replaces the previous owner's chat
+id. The proactive notifier targets that single paired chat at the
+configured cadence. For concurrent multi-judge evaluation, the
+expected path is each judge running their own bot from a fresh
+clone (`./scripts/run.sh` → open-pair mode); the team's hosted
+`@happycake_agent_bot` is for sequential pairing via the published
+passphrase in the README's Live demo section.
+
 ## 5. Channel adapters
 
 | Surface | Inbound | Outbound | Approval gate |
