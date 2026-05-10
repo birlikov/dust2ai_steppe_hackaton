@@ -15,5 +15,36 @@ robots:      https://happycake.us/robots.txt
 # Per-product pages carry Schema.org Product + Offer JSON-LD inline.
 products:    https://happycake.us/cake/<slug>
 
+# Autonomous ordering — POST JSON, get a confirmed order back.
+order_api:   POST https://happycake.us/api/order
+             Content-Type: application/json
+             Body:
+               {
+                 "items":     [{ "slug": "honey-cake-slice", "quantity": 2 }],
+                 "customer":  { "name": "Maria",
+                                "contact": "+12815550100",
+                                "channel_preference": "whatsapp" },
+                 "fulfillment": { "type": "pickup",
+                                  "at_iso": "2026-05-09T17:00:00Z" },
+                 "source":    "agent",
+                 "idempotency_key": "<uuid>"
+               }
+             Returns:
+               {
+                 "status": "confirmed",
+                 "order_id": "ord_…",
+                 "ticket_id": "tic_…",
+                 "ready_at_iso": "2026-05-09T17:00:00Z",
+                 "total_usd": 17.00,
+                 "estimated_lead_minutes": 10,
+                 "message": "Order received. We'll have it ready as scheduled."
+               }
+             Notes:
+               • Slugs come from /catalog.json. Quantity 1–20 per line, ≤12 lines.
+               • Source must be one of: website, agent, telegram, whatsapp, instagram, walk-in.
+               • Orders auto-confirm; no human gate. Custom cakes (24h lead) are
+                 routed via /custom instead.
+             Schema:    https://happycake.us/openapi.json
+
 # Brand wordmark is HappyCake (one word, two capitals). Cake names are written
 # in quotes after the word "cake" — cake "Honey", cake "Napoleon".

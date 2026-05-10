@@ -85,7 +85,23 @@ _KNOWN_CAKE_NAMES: tuple[str, ...] = (
     "Tiramisu",
 )
 _RE_INVERTED_CAKE = re.compile(
-    r"\b(?P<name>" + "|".join(re.escape(n) for n in _KNOWN_CAKE_NAMES) + r")\s+cake\b"
+    r"\b(?P<name>" + "|".join(re.escape(n) for n in _KNOWN_CAKE_NAMES) + r")\s+cake\b",
+    re.IGNORECASE,
+)
+
+# Bare canonical name used as a noun ("a Napoleon", "the Tiramisu") without
+# the `cake "X"` form. We exclude "Honey" from this list because lowercase
+# "honey" is a generic noun (honey-baked, honey-glazed) and would over-flag.
+_BARE_CAKE_NAMES: tuple[str, ...] = (
+    "Napoleon",
+    "Milk Maiden",
+    "Pistachio Roll",
+    "Tiramisu",
+)
+_RE_BARE_CAKE_NAME = re.compile(
+    r'(?<!cake ")(?<![A-Za-z0-9])(?P<name>'
+    + "|".join(re.escape(n) for n in _BARE_CAKE_NAMES)
+    + r")(?![A-Za-z0-9])"
 )
 
 
@@ -204,7 +220,7 @@ def lint(request: LintRequest) -> list[Violation]:
                 Violation(rule_id="brand.r2", message=msg, excerpt=m.group(0))
             )
 
-    # brand.r3 — cake names
+    # brand.r3 — cake names (inverted form: "Honey cake" → cake "Honey")
     m = _RE_INVERTED_CAKE.search(text)
     if m:
         violations.append(
@@ -215,6 +231,19 @@ def lint(request: LintRequest) -> list[Violation]:
                     f"instead of \"{m.group('name')} cake\"."
                 ),
                 excerpt=m.group(0),
+            )
+        )
+    # brand.r3 — bare canonical names used as nouns ("a Napoleon")
+    m_bare = _RE_BARE_CAKE_NAME.search(text)
+    if m_bare:
+        violations.append(
+            Violation(
+                rule_id="brand.r3",
+                message=(
+                    f'bare cake name — use cake "{m_bare.group("name")}" '
+                    f"with the wordmark prefix."
+                ),
+                excerpt=m_bare.group(0),
             )
         )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from src.core.voice import CLOSING_PATTERN, LintRequest, lint, lint_text
 
 
@@ -45,6 +46,48 @@ def test_inverted_cake_name_flagged() -> None:
 def test_correct_cake_name_form_clean() -> None:
     violations = lint_text('Try our cake "Napoleon" today — 1.2 kg, $40.')
     assert all(v.rule_id != "brand.r3" for v in violations)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We have honey cake today.",
+        "the whole honey cake is $55.",
+        "tiramisu cake is back this week.",
+        "PISTACHIO ROLL CAKE FOR SALE",
+    ],
+)
+def test_inverted_cake_name_case_insensitive(text: str) -> None:
+    """Lowercase / mixed-case inverted forms must trip brand.r3."""
+    rules = {v.rule_id for v in lint_text(text)}
+    assert "brand.r3" in rules
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Recommend a Napoleon for celebrations.",
+        "the Tiramisu is light and airy.",
+        "Bring back the Pistachio Roll, please.",
+    ],
+)
+def test_bare_cake_name_flagged(text: str) -> None:
+    """Bare canonical names used as nouns must trip brand.r3."""
+    rules = {v.rule_id for v in lint_text(text)}
+    assert "brand.r3" in rules
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        'Try our cake "Napoleon" today — 1.2 kg, $40.',
+        'cake "Pistachio Roll" is on the counter.',
+        "Honey-glazed walnuts dust the top.",  # lowercase "honey" is fine on its own
+    ],
+)
+def test_canonical_cake_form_does_not_flag(text: str) -> None:
+    rules = {v.rule_id for v in lint_text(text)}
+    assert "brand.r3" not in rules
 
 
 def test_too_many_emoji_flagged() -> None:

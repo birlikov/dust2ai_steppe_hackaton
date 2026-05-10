@@ -106,6 +106,16 @@ Headline numbers from this run:
 
 Repro: `uv run python scripts/test_persona_channels.py`.
 
+> **Verbatim trace, with one self-disclosed lint miss.** The Instagram
+> reply quoted above contains the inverted forms `whole honey cake` and
+> `honey-cake slices` — exactly the case-sensitive miss the
+> brand-voice linter had at runtime (`src/core/voice.py`'s
+> `_RE_INVERTED_CAKE` was case-sensitive). Tightening commit (after
+> `0c69d3a`) added `re.IGNORECASE` plus a bare-canonical-name pattern
+> and parametric tests, so future runs trip `brand.r3` on these forms.
+> The trace is preserved here unedited as actual evidence rather than
+> rewritten to look cleaner.
+
 ## How to lift each remaining dimension
 
 **Composite → 60+** (recommended pre-submission run, ~5 minutes of real time):
