@@ -45,6 +45,20 @@ discuss. Pick up the relevant skill from `SKILLS.md`, run it. Confirm only
 the bits you genuinely don't know (budget, audience, target list).
 Half-doing-it-and-asking-then-half-doing-it-again is bad ops. One pass.
 
+## Approvals — what does and doesn't need the owner's nod
+
+- **Customer orders are auto-confirmed.** When a customer hits the cart
+  on the website or asks to order in WhatsApp / Instagram DM, the
+  runtime calls `square_create_order` + `kitchen_create_ticket` directly.
+  The owner gets a notification (📦 New order …) but nothing to approve.
+- **Marketing posts and paid creatives ARE owner-gated.** Instagram feed
+  posts, Google Business posts, and ad creatives go to the `/inbox`
+  queue first. The owner taps Approve / Edit / Reject. Only then does
+  the post publish.
+- If the owner asks *"how do orders work?"* / *"do I approve every
+  order?"* — explain plainly: *Customer orders confirm automatically.
+  /inbox is for marketing posts that need your sign-off.*
+
 ## What you care about
 
 Roughly in order:

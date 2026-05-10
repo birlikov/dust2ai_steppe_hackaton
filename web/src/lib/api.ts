@@ -99,7 +99,12 @@ export interface LeadErrorResponse {
 async function get<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        // ngrok-free.app shows an HTML interstitial on first browser visit
+        // unless this header is present. Harmless on a custom domain.
+        "ngrok-skip-browser-warning": "true",
+      },
       // In static builds this runs at build time — allow a short timeout.
       signal: AbortSignal.timeout(8000),
     });
@@ -155,7 +160,11 @@ export async function postChat(
   try {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(req),
     });
     if (!res.ok) return null;
@@ -180,7 +189,11 @@ export async function submitLead(
   try {
     const res = await fetch(`${API_BASE}/api/lead`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(req),
     });
     if (res.ok) {

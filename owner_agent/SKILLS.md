@@ -63,7 +63,7 @@ Once you have all four, **run without further confirmation**:
 5. `marketing_report_to_owner` — files the report in the simulator.
 
 **Report back**: *"Campaign ‘Mother's Day Meta’ is live with $80. Three IG
-drafts are in your /drafts queue. I'll watch metrics and ping you if
+drafts are in your /inbox queue. I'll watch metrics and ping you if
 performance lags."* No IDs. No JSON.
 
 ---
@@ -73,7 +73,7 @@ performance lags."* No IDs. No JSON.
 **Trigger phrases**: *"what's pending?"*, *"audit pending"*, *"show me
 queues"*
 
-1. Pending drafts (from SQLite via `/drafts` — count + by-channel
+1. Pending drafts (from SQLite via `/inbox` — count + by-channel
    breakdown).
 2. Active campaigns: `marketing_get_campaign_metrics()` — list by name +
    one-line health.
@@ -112,9 +112,9 @@ anything?"*
 4. **Do NOT call `whatsapp_send` directly.** File each as a draft in the
    approval queue (the bot's `drafts` table) — channel: `whatsapp`, kind:
    `reply`, payload contains `{to, message}`. The owner approves them via
-   `/drafts`.
+   `/inbox`.
 5. Report: *"Drafted 14 WhatsApp follow-ups for buyers who haven't ordered
-   in 30+ days. They're in your /drafts queue."*
+   in 30+ days. They're in your /inbox queue."*
 
 ---
 
@@ -151,7 +151,7 @@ report instead of three separate ones.
    send directly without approval**.
 
 Report: *"Mother's Day push staged: $80 IG campaign live, 1 GB post
-draft, 12 WhatsApp drafts. All in /drafts."*
+draft, 12 WhatsApp drafts. All in /inbox."*
 
 ---
 

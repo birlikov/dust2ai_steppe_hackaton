@@ -188,6 +188,7 @@ class OwnerIdentity:
     telegram_chat_id: int
     telegram_username: str | None
     captured_at: str
+    notifier_interval_s: int | None = None  # None → use env default
 
 
 async def remember_owner(*, chat_id: int, username: str | None = None) -> None:
@@ -214,10 +215,17 @@ async def get_owner() -> OwnerIdentity | None:
     row = await cur.fetchone()
     if row is None:
         return None
+    interval = None
+    try:
+        interval = row["notifier_interval_s"]
+    except (KeyError, IndexError):
+        # Pre-migration row schema; column missing.
+        interval = None
     return OwnerIdentity(
         telegram_chat_id=row["telegram_chat_id"],
         telegram_username=row["telegram_username"],
         captured_at=row["captured_at"],
+        notifier_interval_s=interval if interval is not None else None,
     )
 
 
@@ -226,6 +234,26 @@ async def forget_owner() -> None:
     conn = await get_connection()
     await conn.execute("DELETE FROM owner_identity WHERE id = 1")
     await conn.commit()
+
+
+async def set_notifier_interval(seconds: int | None) -> None:
+    """Persist the proactive-push cadence the owner picked via ``/notify``.
+
+    ``seconds = 0``  → silenced (loop stays alive, doesn't push).
+    ``seconds = None`` → fall back to the env-default interval.
+    """
+    conn = await get_connection()
+    await conn.execute(
+        "UPDATE owner_identity SET notifier_interval_s = ? WHERE id = 1",
+        (seconds,),
+    )
+    await conn.commit()
+
+
+async def get_notifier_interval() -> int | None:
+    """Return the per-owner notifier interval, or ``None`` if not set."""
+    rec = await get_owner()
+    return rec.notifier_interval_s if rec is not None else None
 
 
 # ---------------------------------------------------------------------------

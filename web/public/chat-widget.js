@@ -166,7 +166,11 @@
 
     fetch(API_BASE + "/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(body),
     })
       .then(function (res) {

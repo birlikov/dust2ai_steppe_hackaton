@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CashierChat from "../components/CashierChat.astro";
+import SpecialtiesStrip from "../components/SpecialtiesStrip.astro";
 import { fetchCatalog } from "../lib/api";
 import type { Product, KitchenState } from "../lib/api";
 
@@ -22,6 +23,62 @@ const catalogUnavailable = catalogData === null;
   <!-- Cashier hero — talk to the HappyCake cashier directly -->
   <CashierChat />
   <div class="awning-pattern h-5 w-full opacity-60"></div>
+
+  <!-- Specialties — three on-the-counter cakes, deep-linked to /cake/[slug] -->
+  <SpecialtiesStrip />
+
+  <!-- Brand story strip -->
+  <section class="bg-happy-blue-900 text-text-on-blue py-14">
+    <div class="max-w-5xl mx-auto px-4 grid md:grid-cols-2 gap-10 items-center">
+      <div>
+        <p class="text-happy-blue-200 text-sm font-medium uppercase tracking-widest mb-3">◆ Our story</p>
+        <h2 class="font-display text-3xl font-semibold text-cream-50 mb-4 leading-snug">
+          &ldquo;It&rsquo;s just like homemade.&rdquo;
+        </h2>
+        <p class="text-happy-blue-200 text-base leading-relaxed mb-3">
+          We started baking cakes the way you would for someone you love. Every
+          ingredient is chosen by hand. Every recipe was perfected over years
+          until it earned its name.
+        </p>
+        <p class="text-happy-blue-200 text-base leading-relaxed mb-5">
+          When you choose our cake for a moment that matters, our hearts cheer
+          and sink at once. That mix of pride and responsibility is what keeps
+          us improving, day after day.
+        </p>
+        <a href="/about" class="btn-secondary border-happy-blue-200 text-happy-blue-200 hover:bg-happy-blue-700">
+          Read more
+        </a>
+      </div>
+      <div class="hidden md:block">
+        <img
+          src="/brand/hero/happy-cake-hero-02.webp"
+          alt="Behind the counter at HappyCake Sugar Land"
+          width="480"
+          height="360"
+          class="w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    </div>
+  </section>
+
+  <!-- Hours + location strip -->
+  <section class="bg-cream-100 border-t border-b border-[rgba(14,42,60,0.12)]">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <p class="text-text-primary">
+        <span class="font-medium">Mon-Fri 9-18</span>
+        <span class="opacity-50">·</span>
+        <span class="font-medium">Sat 10-14</span>
+        <span class="opacity-50">·</span>
+        <span class="opacity-70">Closed Sun</span>
+      </p>
+      <p class="text-text-primary">
+        <span class="opacity-70">350 Promenade Way · Sugar Land, TX</span>
+        <span class="opacity-50 mx-2">·</span>
+        <a href="tel:+12819798320" class="text-happy-blue-500 hover:text-happy-blue-700">(281) 979-8320</a>
+      </p>
+    </div>
+  </section>
 
   <!-- Today's bake notice -->
   {kitchen && !kitchen.overCapacity && (

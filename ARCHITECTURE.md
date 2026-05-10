@@ -27,7 +27,7 @@ in `.env`; we removed the dependency from `pyproject.toml` in Phase 1.
                    │  + handlers, owner_commands,     │                   │
                    │    keyboards, middleware         │                   │
                    └────────────────┬─────────────────┘                   │
-                                    │ /dashboard, /budget, /drafts        │
+                                    │ /dashboard, /budget, /inbox,/notify │
                                     │ + free-text via bridge              │
                                     ▼                                     │
                    ┌────────────────────────────────────────────┐         │
@@ -147,9 +147,10 @@ visibility, and approvals. Commands:
 | `/help` | static command listing | Operator UX baseline |
 | `/dashboard` | `src/bot/owner_commands.py::cmd_dashboard` — calls `square_get_pos_summary`, `kitchen_get_production_summary`, `evaluator_get_evidence_summary` | Live MCP-grounded snapshot |
 | `/budget` | `cmd_budget` — `marketing_get_budget` + `marketing_get_campaign_metrics` + recent leads from SQLite | Marketing $500 visibility |
-| `/drafts` | `cmd_drafts` — lists pending drafts with **Approve / Edit / Reject** inline keyboard. Approve drives `instagram_approve_post` + `instagram_publish_post` for IG drafts | Brandbook §7 approval gate |
+| `/inbox` | `cmd_inbox` (alias `/drafts`) — lists pending **marketing drafts** with **Approve / Edit / Reject** inline keyboard. Customer orders are auto-confirmed and not queued here. Approve drives `instagram_approve_post` + `instagram_publish_post` for IG drafts | Brandbook §7 approval gate |
+| `/notify` | `cmd_notify` — sets the proactive-update cadence per owner (`/notify 1m`, `/notify 30m`, `/notify 2h`, `/notify off`, `/notify on`). Persists to `owner_identity.notifier_interval_s`; `notifier.py` reads the per-owner value each tick and falls back to env default when NULL | Operator-tuneable cadence; respects "don't ping me too often" |
 | `/cancel`, `/restart` | clear FSM, message ack | Operator UX safety |
-| free text | message handler injects `bridge: ClaudeBridge`; orchestrator runs the same path as customer channels | Persona smoke / debug |
+| free text | message handler injects `bridge: ClaudeBridge`; orchestrator runs the same path as customer channels. Replies go through `tg_normalise()` (`src/bot/markdown.py`) which converts CommonMark `**bold**` → Telegram-classic `*bold*` so the persona's bolds actually render | Persona smoke / debug |
 
 FSM state persists in `data/state.db` (`fsm_state` table) so a process
 restart doesn't lose mid-flow context. Every inbound message goes through
@@ -163,7 +164,7 @@ restart doesn't lose mid-flow context. Every inbound message goes through
 | WhatsApp | `world_next_event` (sandbox) → `WorldPoller._handle_whatsapp` | `whatsapp_send` MCP | none for DMs (per brandbook §7); orders create `kitchen_create_ticket` which is owner-visible via `/dashboard` |
 | Instagram DM | same poller → `_handle_instagram_dm` | `instagram_send_dm` | none for DMs |
 | Instagram comment | same poller → `_handle_instagram_comment` | `instagram_reply_to_comment` | none |
-| Instagram feed posts | `seed_drafts.py` → `instagram_schedule_post` → `drafts` table | owner taps Approve in `/drafts` → `instagram_approve_post` → `instagram_publish_post` | **required** (brandbook §7) |
+| Instagram feed posts | `seed_drafts.py` → `instagram_schedule_post` → `drafts` table | owner taps Approve in `/inbox` → `instagram_approve_post` → `instagram_publish_post` | **required** (brandbook §7) |
 | Google Business reviews | `seed_review_replies.py` → `gb_list_reviews` | bridge generates reply → `gb_simulate_reply` | logged but not gated; brandbook says *every review answered* |
 | Google Business posts | (Phase 4+) | `gb_simulate_post` | required (treat like IG posts) |
 | Lead form | `POST /api/lead` from Astro storefront | persists to `leads` SQLite + best-effort `marketing_report_to_owner` | none — leads always captured |
@@ -177,6 +178,7 @@ Order flow (when the runtime persona accepts an order in chat):
 3. Runtime calls `square_create_order` with `items[{variationId, quantity}]`, `source` (`whatsapp` | `instagram` | `website` | `walk-in` | `agent`), and `customerName`. Returns `orderId`.
 4. Runtime calls `kitchen_create_ticket` with `orderId`, `customerName`, `items[{productId, quantity}]` — **`productId` ≠ `variationId`** (mapping via `kitchenProductId` in catalog).
 5. Kitchen-side flow (out of scope for the runtime; owner / dispatcher drives it): `kitchen_accept_ticket` → `kitchen_mark_ready` (or `kitchen_reject_ticket` if infeasible).
+6. **Owner notification (best-effort):** after step 4 succeeds (or `kitchen_pending` when step 4 fails) `_notify_owner_of_order` in `src/webhooks/app.py` opens a one-shot aiogram `Bot`, looks up the paired owner in `owner_identity`, and sends a one-line summary with channel-aware emoji (`📦 website`, `💬 whatsapp`, `📸 instagram`, `🤖 agent`, `🚶 walk-in`), brand-correct cake names, total, and pickup/delivery time. Failures log a warning and never block the customer order.
 
 The runtime never short-circuits step 2. The brand-voice linter
 (`src/core/voice.py`) warns on missing-evidence patterns at the reply
@@ -304,7 +306,7 @@ scripts/
   run_scenario.py     world-engine driver + self-grade
   seed_marketing.py   $500 marketing loop end-to-end
   seed_review_replies.py  brand-voice GB review replies
-  seed_drafts.py      IG post drafts seeded for /drafts approval
+  seed_drafts.py      IG post drafts seeded for /inbox approval
   demo.sh             single-shot orchestrator (the submission demo)
   start_tunnel.sh     ngrok tunnel
 HACKATHON_BRIEF.md    the unsealed brief (verbatim)

@@ -69,7 +69,7 @@ view for ops conversations.
 |---|---|---|
 | `instagram_list_dm_threads` | "what's in the IG inbox?" | Count + the freshest message. |
 | `instagram_send_dm` / `instagram_reply_to_comment` | draft and ask first; or send if the owner explicitly approves the wording in the same turn. |
-| `instagram_schedule_post` | safe — it goes into the drafts queue. Then notify the owner via `/drafts`. |
+| `instagram_schedule_post` | safe — it goes into the drafts queue. Then notify the owner via `/inbox`. |
 | `instagram_approve_post` + `instagram_publish_post` | **only triggered from the drafts queue Approve button** — don't call these from a free-text exchange. |
 | `instagram_register_webhook` | startup only. |
 

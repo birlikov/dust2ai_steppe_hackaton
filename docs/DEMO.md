@@ -89,7 +89,7 @@ The script:
    (`scripts/seed_drafts.py`) — one per brandbook content group
    (Product / Audience / Company), schedules each via
    `instagram_schedule_post`, and persists them locally so the
-   Telegram `/drafts` command can list and approve them.
+   Telegram `/inbox` command can list and approve them.
 5. Drives the world engine (`scripts/run_scenario.py`) with
    `world_start_scenario("launch-day-revenue-engine")` and the
    `WorldPoller`, periodically calling `world_advance_time` so the
@@ -135,7 +135,7 @@ In Telegram:
 | `/help` | Command listing |
 | `/dashboard` | POS, kitchen, evaluator summaries pulled live from MCP |
 | `/budget` | Marketing budget + recent website leads |
-| `/drafts` | Lists pending drafts with **Approve / Edit / Reject** inline keyboard. Approving an Instagram draft drives `instagram_approve_post` + `instagram_publish_post`. |
+| `/inbox` | Lists pending drafts with **Approve / Edit / Reject** inline keyboard. Approving an Instagram draft drives `instagram_approve_post` + `instagram_publish_post`. |
 | free text | Bridges through `claude -p` with the runtime persona; the orchestrator runs the brand-voice linter on the reply. |
 
 In the browser at `http://localhost:4321`:
@@ -163,7 +163,7 @@ In the browser at `http://localhost:4321`:
 | Functional Tester (customer scenarios) | The on-site widget, world events, and Telegram free-text all route through the orchestrator and never hardcode answers |
 | Agent-friendliness auditor | `web/` exposes JSON-LD per product, `/catalog.json`, `/policies` JSON, `/sitemap.xml`, predictable URLs |
 | On-site assistant evaluator | The chat widget at `web/public/chat-widget.js` posts to `/api/chat`; replies are MCP-grounded |
-| Operator UX (Telegram) | `/dashboard`, `/budget`, `/drafts` (with inline keyboard), `/help`, `/cancel`, `/restart` — all replies acknowledge within ~2 s |
+| Operator UX (Telegram) | `/dashboard`, `/budget`, `/inbox` (with inline keyboard), `/help`, `/cancel`, `/restart` — all replies acknowledge within ~2 s |
 | Code reviewer | `git log` shows scoped conventional commits per phase; `pyproject.toml` runs ruff + mypy --strict + pytest at every commit (pre-commit hook) |
 | Business analyst | `docs/MARKETING_PLAN.md` carries the $500 reasoning with margin/AOV/conversion math and Sugar Land context |
 

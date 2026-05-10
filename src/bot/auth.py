@@ -31,6 +31,7 @@ from aiogram.types import (
     Update,
 )
 
+from src.bot.markdown import tg_normalise
 from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.storage import drafts
@@ -70,8 +71,10 @@ class AuthMiddleware(BaseMiddleware):
             log.info("auth.paired", chat_id=chat_id)
             if message is not None:
                 await message.answer(
-                    "Paired. You're the owner now. Ask me anything — "
-                    "*sales today?*, *anything urgent?* — or use /help.",
+                    tg_normalise(
+                        "Paired. You're the owner now. Ask me anything — "
+                        "*sales today?*, *anything urgent?* — or use /help."
+                    ),
                     parse_mode="Markdown",
                 )
             return None

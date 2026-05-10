@@ -241,7 +241,11 @@ import BaseLayout from "../layouts/BaseLayout.astro";
           try {
             var res = await fetch(apiBase + "/api/order", {
               method: "POST",
-              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                "ngrok-skip-browser-warning": "true",
+              },
               body: JSON.stringify(body),
             });
             var data = await res.json().catch(function () { return {}; });

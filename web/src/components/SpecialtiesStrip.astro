@@ -1,0 +1,98 @@
+---
+/**
+ * SpecialtiesStrip — three featured products on the homepage.
+ *
+ * Static shell at build time, populated client-side from /api/catalog so
+ * the strip is always live (no "we're updating the menu" stuck state).
+ * Picks the first three products; deep-links to /cake/[slug].
+ */
+---
+
+<section class="bg-cream-50 border-t border-[rgba(14,42,60,0.08)]">
+  <div class="max-w-5xl mx-auto px-4 py-12 md:py-16">
+    <div class="flex items-end justify-between mb-6 flex-wrap gap-3">
+      <div>
+        <p class="cake-name-label text-happy-blue-500 mb-1">◆ Today's specialties</p>
+        <h2 class="font-display text-3xl md:text-4xl font-semibold text-happy-blue-900 leading-tight">
+          On the counter today.
+        </h2>
+      </div>
+      <a href="/menu" class="text-sm font-medium text-happy-blue-700 hover:text-happy-blue-900 no-underline">
+        See the full menu →
+      </a>
+    </div>
+
+    <div id="specialties-loading" class="card-border bg-cream-100 p-6 text-center text-sm text-text-primary opacity-70">
+      Looking at what's fresh…
+    </div>
+    <div id="specialties-error" class="card-border bg-cream-100 p-6 text-center hidden">
+      <p class="font-display text-xl text-happy-blue-700 mb-1">We're updating the menu.</p>
+      <p class="text-sm text-text-primary">
+        <a href="/menu" class="text-happy-blue-500 underline">Browse what we have</a>
+        or
+        <a href="https://wa.me/12815550100" rel="noopener noreferrer" target="_blank">message us on WhatsApp</a>.
+      </p>
+    </div>
+    <ul id="specialties-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 list-none m-0 p-0 hidden"></ul>
+  </div>
+</section>
+
+<script is:inline define:vars={{ apiBase: import.meta.env.PUBLIC_API_BASE ?? "" }}>
+  (function () {
+    "use strict";
+    var loadingEl = document.getElementById("specialties-loading");
+    var errorEl = document.getElementById("specialties-error");
+    var gridEl = document.getElementById("specialties-grid");
+    if (!loadingEl || !errorEl || !gridEl) return;
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+
+    fetch(apiBase + "/api/catalog", {
+      headers: {
+        Accept: "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(String(r.status))); })
+      .then(function (data) {
+        var products = ((data && data.products) || []).slice(0, 3);
+        if (products.length === 0) {
+          loadingEl.classList.add("hidden");
+          errorEl.classList.remove("hidden");
+          return;
+        }
+        loadingEl.classList.add("hidden");
+        gridEl.classList.remove("hidden");
+        gridEl.innerHTML = products.map(function (p) {
+          var image = (p.image || "").replace("/assets/brand", "/brand");
+          var weight = p.weightLabel ? p.weightLabel + ", " : "";
+          var price = p.priceFormatted || "";
+          return (
+            '<li class="card-border bg-cream-100 flex flex-col">' +
+              '<a href="/cake/' + encodeURIComponent(p.slug) + '" class="no-underline">' +
+                '<img src="' + escapeHtml(image) + '" alt="' + escapeHtml(p.name) + '" width="400" height="240" class="w-full h-44 object-cover" loading="lazy" />' +
+              '</a>' +
+              '<div class="p-4 flex flex-col flex-1">' +
+                '<p class="cake-name-label text-happy-blue-700 mb-1">' + escapeHtml(p.category || "") + '</p>' +
+                '<h3 class="font-display text-lg font-semibold text-happy-blue-900 leading-snug mb-1">' +
+                  '<a href="/cake/' + encodeURIComponent(p.slug) + '" class="text-happy-blue-900 hover:text-happy-blue-700 no-underline">' +
+                    escapeHtml(p.name) +
+                  '</a>' +
+                '</h3>' +
+                '<p class="text-xs text-text-primary opacity-80 mb-2 leading-relaxed flex-1">' + escapeHtml((p.description || "").slice(0, 110)) + '</p>' +
+                '<p class="font-body font-medium text-sm text-happy-blue-900">' + escapeHtml(weight + price) + '</p>' +
+              '</div>' +
+            '</li>'
+          );
+        }).join("");
+      })
+      .catch(function () {
+        loadingEl.classList.add("hidden");
+        errorEl.classList.remove("hidden");
+      });
+  })();
+</script>

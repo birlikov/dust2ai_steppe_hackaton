@@ -108,7 +108,12 @@
       });
     }
 
-    fetch(apiBase + "/api/catalog", { headers: { Accept: "application/json" } })
+    fetch(apiBase + "/api/catalog", {
+      headers: {
+        Accept: "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+    })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(String(r.status))); })
       .then(function (data) {
         var products = (data && data.products) || [];

@@ -205,83 +205,70 @@
     line-height: 1.55;
   }
   .cashier-card__transcript.has-messages {
-    max-height: 420px;
+    max-height: 480px;
     margin-bottom: 0.85rem;
-    padding: 0.75rem 0.25rem;
+    padding: 0.85rem 0.25rem;
   }
   .cashier-card__transcript .cashier-row {
     display: flex;
-    align-items: flex-start;
-    gap: 0.6rem;
-    margin: 0 0 0.85rem;
+    margin: 0 0 1.2rem;
     animation: cashier-fade 180ms ease both;
-  }
-  .cashier-card__transcript .cashier-row--user {
-    flex-direction: row-reverse;
   }
   @keyframes cashier-fade {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  .cashier-avatar {
-    flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #1B4868;
-    color: #FBF6E8;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: "Inter", sans-serif;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .cashier-row--assistant .cashier-avatar {
-    background: #6E9D74;
-  }
   .cashier-bubble-wrap {
-    max-width: calc(100% - 38px);
+    max-width: 82%;
     display: flex;
     flex-direction: column;
   }
+  .cashier-row--user { justify-content: flex-end; }
   .cashier-row--user .cashier-bubble-wrap { align-items: flex-end; }
+  .cashier-row--assistant { justify-content: flex-start; }
   .cashier-bubble-label {
     font-family: "Inter", sans-serif;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: rgba(14, 42, 60, 0.5);
-    margin-bottom: 0.15rem;
+    letter-spacing: 0.16em;
+    margin-bottom: 0.25rem;
+    opacity: 0.7;
+  }
+  .cashier-row--user .cashier-bubble-label {
+    color: #1B4868;
+  }
+  .cashier-row--assistant .cashier-bubble-label {
+    color: #6E9D74;
   }
   .cashier-bubble {
-    padding: 0.6rem 0.9rem;
-    line-height: 1.5;
+    padding: 0.75rem 1rem;
+    line-height: 1.55;
     word-wrap: break-word;
+    box-shadow: 0 1px 2px rgba(14, 42, 60, 0.08);
   }
   .cashier-row--user .cashier-bubble {
-    background: #1B4868;
+    background: #0E2A3C;
     color: #FBF6E8;
-    border-bottom-right-radius: 0;
-    border-radius: 12px 12px 0 12px;
+    border-radius: 14px 14px 4px 14px;
   }
   .cashier-row--assistant .cashier-bubble {
     background: #F4ECD3;
     color: #1A1816;
-    border-radius: 12px 12px 12px 0;
+    border-radius: 14px 14px 14px 4px;
+    border-left: 3px solid #6E9D74;
   }
   .cashier-row--error .cashier-bubble {
     background: #E08066;
     color: #FBF6E8;
-    border-radius: 12px;
+    border-radius: 14px;
   }
   .cashier-row--typing .cashier-bubble {
     font-style: italic;
     opacity: 0.7;
     background: transparent;
     padding-left: 0.2rem;
+    box-shadow: none;
   }
   .cashier-row--typing .cashier-bubble::after {
     content: "…";
@@ -399,8 +386,47 @@
   (function () {
     "use strict";
     const STORAGE_KEY = "hc_cashier_session_id";
+    const HISTORY_KEY = "hc_cashier_history";
+    const HISTORY_MAX = 24;
+    const CART_KEY = "hc_cart";
     let sessionId = localStorage.getItem(STORAGE_KEY);
     let pending = false;
+
+    function readHistory() {
+      try {
+        var raw = localStorage.getItem(HISTORY_KEY);
+        if (!raw) return [];
+        var arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr.slice(-HISTORY_MAX) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function writeHistory(history) {
+      try {
+        localStorage.setItem(
+          HISTORY_KEY,
+          JSON.stringify(history.slice(-HISTORY_MAX))
+        );
+      } catch (e) { /* quota / disabled — ignore */ }
+    }
+    function readCartContext() {
+      try {
+        var raw = localStorage.getItem(CART_KEY);
+        var cart = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(cart) || cart.length === 0) return null;
+        return cart.map(function (line) {
+          return {
+            slug: line.slug,
+            name: line.name,
+            quantity: line.quantity,
+            price: line.price,
+          };
+        });
+      } catch (e) {
+        return null;
+      }
+    }
 
     const transcript = document.getElementById("cashier-transcript");
     const form = document.getElementById("cashier-form");
@@ -511,32 +537,26 @@
       var row = document.createElement("div");
       row.className = "cashier-row cashier-row--" + role;
 
-      var avatar = document.createElement("div");
-      avatar.className = "cashier-avatar";
-      avatar.textContent = role === "user" ? "you" : "HC";
-      avatar.setAttribute("aria-hidden", "true");
-
       var wrap = document.createElement("div");
       wrap.className = "cashier-bubble-wrap";
 
       var label = document.createElement("div");
       label.className = "cashier-bubble-label";
-      label.textContent = role === "user" ? "you" : role === "assistant" ? "cashier" : role;
+      label.textContent = role === "user"
+        ? "you →"
+        : role === "assistant" ? "← cashier" : role;
 
       var bubble = document.createElement("div");
       bubble.className = "cashier-bubble";
 
       if (role === "assistant") {
         bubble.innerHTML = renderMarkdown(cleanReply(text));
-      } else if (role === "typing") {
-        bubble.textContent = text;
       } else {
         bubble.textContent = text;
       }
 
       wrap.appendChild(label);
       wrap.appendChild(bubble);
-      row.appendChild(avatar);
       row.appendChild(wrap);
       transcript.appendChild(row);
       transcript.classList.add("has-messages");
@@ -555,10 +575,17 @@
       const typing = appendMessage("checking the counter", "typing");
 
       try {
+        var body = { session_id: sessionId, message: message };
+        var cart = readCartContext();
+        if (cart) body.context = { cart: cart };
         const res = await fetch(apiBase + "/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ session_id: sessionId, message: message }),
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
+          body: JSON.stringify(body),
         });
         typing.remove();
 
@@ -579,6 +606,11 @@
         const reply = data.reply || "(no response)";
         setState(pickState(reply));
         appendMessage(reply, "assistant");
+        // Persist this exchange so a page navigation doesn't lose context.
+        var history = readHistory();
+        history.push({ role: "user", text: message });
+        history.push({ role: "assistant", text: reply });
+        writeHistory(history);
       } catch (err) {
         typing.remove();
         setState("apologizing");
@@ -605,6 +637,19 @@
       const message = (input.value || "").trim();
       sendMessage(message);
     });
+
+    // Replay prior history on page load so navigating to /menu and back
+    // doesn't drop the conversation. Skip the typing/error variants —
+    // we only persist real user/assistant turns.
+    (function replayHistory() {
+      var history = readHistory();
+      if (history.length === 0) return;
+      history.forEach(function (turn) {
+        if (turn && (turn.role === "user" || turn.role === "assistant")) {
+          appendMessage(turn.text || "", turn.role);
+        }
+      });
+    })();
 
     chips.addEventListener("click", function (event) {
       const target = event.target;

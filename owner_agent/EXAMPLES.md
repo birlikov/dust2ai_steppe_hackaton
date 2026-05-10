@@ -69,7 +69,7 @@ generating replies. Specifics will differ; the rhythm shouldn't.
 
 **Owner**: *delete that bad review.*
 
-**Assistant**: *I won't — the brand book is firm on never deleting customer comments. I can draft a reply that addresses what they said and offers a remedy. Want me to do that and send it to your `/drafts` queue?*
+**Assistant**: *I won't — the brand book is firm on never deleting customer comments. I can draft a reply that addresses what they said and offers a remedy. Want me to do that and send it to your `/inbox` queue?*
 
 ## Things you don't say
 

@@ -101,7 +101,7 @@ cake mixes the actual lift will be higher).
 6. **Cake names in quotes.** *cake "Honey"*, *cake "Napoleon"*. Never
    *Honey cake*.
 7. **Owner approves every paid creative** (brand.r6) — drafts go through
-   the `/drafts` Telegram queue.
+   the `/inbox` Telegram queue.
 
 ### How the executable mirror covers each channel
 
@@ -181,7 +181,7 @@ The Telegram `/budget` command surfaces the current state at any time.
 Calendar shifts month-to-month with brandbook Appendix B peaks: June
 keeps Father's Day light; July is a single greeting on Independence Day;
 late November pivots Channel #1 to Thanksgiving; December swings hard to
-Christmas. Any change requires owner approval through `/drafts` before
+Christmas. Any change requires owner approval through `/inbox` before
 launch.
 
 ---

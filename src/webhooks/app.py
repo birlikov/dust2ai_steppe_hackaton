@@ -29,6 +29,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -36,6 +39,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.agents.claude_bridge import build_default_bridge
+from src.bot.markdown import tg_normalise
 from src.core.config import REPO_ROOT, get_settings
 from src.core.logging import get_logger
 from src.mcp.http_client import (
@@ -86,6 +90,9 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     session_id: str | None = None
     history: list[dict[str, str]] | None = None
+    # Optional client-side context — currently the chat-widget passes
+    # ``cart`` so the cashier can talk about what's already in the basket.
+    context: dict[str, Any] | None = None
 
 
 class ChatResponse(BaseModel):
@@ -272,12 +279,21 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
                 },
             )
         external_id = payload.session_id or _new_external_id()
+        # If the chat-widget passed cart context, prepend a short, model-
+        # readable summary to the user message so the persona can talk
+        # about what's already in the basket.
+        user_message = payload.message
+        cart_summary = _format_cart_context(
+            payload.context.get("cart") if isinstance(payload.context, dict) else None
+        )
+        if cart_summary:
+            user_message = cart_summary + "\n\n" + payload.message
         try:
             turn = await orchestrator.run(
                 TurnRequest(
                     channel="website",
                     external_id=external_id,
-                    user_message=payload.message,
+                    user_message=user_message,
                     require_closing_pattern=False,
                 )
             )
@@ -480,6 +496,14 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
 
         ready_at = payload.fulfillment.at_iso
 
+        await _notify_owner_of_order(
+            payload=payload,
+            order_id=order_id,
+            ticket_id=ticket_id,
+            total_cents=total_cents,
+            kitchen_status=kitchen_status,
+        )
+
         return JSONResponse(
             content=OrderResponse(
                 status=kitchen_status,
@@ -554,6 +578,38 @@ def _new_external_id() -> str:
     return str(uuid.uuid4())
 
 
+def _format_cart_context(cart: Any) -> str:
+    """Return a one-line bracketed summary of the customer's cart, or ''."""
+    if not isinstance(cart, list) or not cart:
+        return ""
+    parts: list[str] = []
+    total = 0.0
+    for line in cart:
+        if not isinstance(line, dict):
+            continue
+        name = str(line.get("name") or line.get("slug") or "item")
+        quantity_raw = line.get("quantity") or 0
+        try:
+            quantity = int(quantity_raw)
+        except (TypeError, ValueError):
+            continue
+        if quantity <= 0:
+            continue
+        try:
+            unit_price = float(line.get("price") or 0)
+        except (TypeError, ValueError):
+            unit_price = 0.0
+        line_total = unit_price * quantity
+        total += line_total
+        parts.append(f"{quantity}x {name} (${line_total:,.2f})")
+    if not parts:
+        return ""
+    return (
+        f"[Customer's current cart: {'; '.join(parts)}. "
+        f"Total ${total:,.2f}. Use this only if the customer asks about it.]"
+    )
+
+
 def _derive_order_key(payload: OrderRequest) -> str:
     """Compute an idempotency key that survives same-minute retries."""
     bucket = datetime.now(UTC).strftime("%Y%m%dT%H%M")
@@ -573,6 +629,73 @@ def _compose_customer_note(payload: OrderRequest) -> str:
     if payload.fulfillment.notes:
         parts.append(payload.fulfillment.notes)
     return ". ".join(parts)
+
+
+_SOURCE_EMOJI: dict[str, str] = {
+    "website": "📦",
+    "agent": "🤖",
+    "whatsapp": "💬",
+    "instagram": "📸",
+    "telegram": "📨",
+    "walk-in": "🚶",
+}
+
+
+async def _notify_owner_of_order(
+    *,
+    payload: OrderRequest,
+    order_id: str,
+    ticket_id: str | None,
+    total_cents: int,
+    kitchen_status: str,
+) -> None:
+    """Push a one-line summary of the new order to the owner's Telegram.
+
+    Best-effort: failures (no owner paired, Telegram down, missing token)
+    log a warning and never block the customer order. Brand-correct cake
+    names + Telegram-classic Markdown bold (single asterisks).
+    """
+    try:
+        owner = await drafts.get_owner()
+        if owner is None:
+            return
+        token = get_settings().telegram_bot_token
+        if not token:
+            log.warning("order_notify.no_token")
+            return
+
+        emoji = _SOURCE_EMOJI.get(payload.source, "📦")
+        lines: list[str] = [f"{item.quantity}x {item.slug}" for item in payload.items]
+        body_parts = [
+            f"{emoji} *New order* — {payload.customer.name}",
+            ", ".join(lines),
+            (
+                f"*${total_cents / 100:,.2f}* · {payload.fulfillment.type}"
+                + (f" at {payload.fulfillment.at_iso}" if payload.fulfillment.at_iso else "")
+            ),
+            f"_order {order_id[:14]}_"
+            + (f" · _ticket {ticket_id[:14]}_" if ticket_id else ""),
+        ]
+        if kitchen_status == "kitchen_pending":
+            body_parts.append("_kitchen ticket pending — will retry shortly_")
+        body = "\n".join(body_parts)
+
+        # One-shot Bot — the polling bot lives in a separate process,
+        # so we open/close a fresh session per push.
+        bot = Bot(
+            token=token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            await bot.send_message(
+                owner.telegram_chat_id,
+                tg_normalise(body),
+                parse_mode="Markdown",
+            )
+        finally:
+            await bot.session.close()
+    except Exception as exc:
+        log.warning("order_notify.failed", err=str(exc))
 
 
 def _extract_id(obj: Any, key: str) -> str | None:

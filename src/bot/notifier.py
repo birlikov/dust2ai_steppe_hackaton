@@ -27,6 +27,7 @@ from typing import Any
 from aiogram import Bot
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
+from src.bot.markdown import tg_normalise
 from src.core.logging import get_logger
 from src.mcp.http_client import (
     HappycakeMcpClient,
@@ -86,17 +87,33 @@ async def run(
     interval_s: int,
     fallback_chat_id: int | None = None,
 ) -> None:
-    """Main loop. Cancellable; handles transient errors silently."""
+    """Main loop. Cancellable; handles transient errors silently.
+
+    The owner can override the cadence at runtime via the bot's
+    ``/notify`` command — we re-read the per-owner pref on every tick.
+    Setting the pref to ``0`` silences pushes (the loop stays alive so
+    ``/notify on`` can re-enable without a restart).
+    """
     log.info("notifier.started", interval_s=interval_s)
     # First tick captures baseline only — no message.
     await _ensure_snapshot(mcp)
     try:
         while True:
+            sleep_for = await _resolve_interval(interval_s)
             try:
-                await asyncio.sleep(interval_s)
+                await asyncio.sleep(sleep_for)
             except asyncio.CancelledError:
                 log.info("notifier.cancelled")
                 raise
+            silenced = await _is_silenced()
+            if silenced:
+                # Loop alive but no push — keep the snapshot fresh.
+                try:
+                    snap = await _capture(mcp)
+                    await _write_state(snap)
+                except Exception as exc:
+                    log.warning("notifier.silent_snapshot_failed", err=str(exc))
+                continue
             try:
                 await _tick(
                     bot=bot,
@@ -110,6 +127,21 @@ async def run(
                 log.exception("notifier.tick_failed", err=str(exc))
     except asyncio.CancelledError:
         return
+
+
+async def _resolve_interval(default_s: int) -> int:
+    """Return the per-owner interval if set, else fall back to env default."""
+    override = await drafts.get_notifier_interval()
+    if override is None or override == 0:
+        # 0 = silenced; loop still ticks at default cadence to recover quickly
+        # the moment the owner re-enables. None = use env default.
+        return max(60, default_s)
+    return max(60, override)
+
+
+async def _is_silenced() -> bool:
+    override = await drafts.get_notifier_interval()
+    return override == 0
 
 
 async def _ensure_snapshot(mcp: HappycakeMcpClient) -> _Snapshot:
@@ -147,9 +179,13 @@ async def _tick(
         await _write_state(current)
         return
     try:
-        await bot.send_message(chat_id, prose)
+        await bot.send_message(chat_id, tg_normalise(prose), parse_mode="Markdown")
     except Exception as exc:
-        log.warning("notifier.send_failed", err=str(exc))
+        log.warning("notifier.send_md_failed", err=str(exc))
+        try:
+            await bot.send_message(chat_id, prose)
+        except Exception as exc2:
+            log.warning("notifier.send_plain_failed", err=str(exc2))
     await _write_state(current)
 
 

@@ -75,7 +75,7 @@ asyncio.run(main())
 
 # 2. Re-seed the channel counters (after scenario reset).
 uv run python scripts/seed_review_replies.py    # gbusinessReplies, channel_response GB part
-uv run python scripts/seed_drafts.py            # IG drafts queued; owner approves via /drafts to fire instagram_publish_post → instagramActions
+uv run python scripts/seed_drafts.py            # IG drafts queued; owner approves via /inbox to fire instagram_publish_post → instagramActions
 
 # 3. Drive the scenario; inject WA/IG events if the scenario doesn't.
 uv run python scripts/run_scenario.py --max-events 30 --advance-each 30

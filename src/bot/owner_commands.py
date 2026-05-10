@@ -21,6 +21,7 @@ from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.bot.keyboards import draft_keyboard, parse_draft_callback
+from src.bot.markdown import tg_normalise
 from src.core.logging import get_logger
 from src.mcp.http_client import (
     HappycakeMcpClient,
@@ -76,7 +77,7 @@ async def cmd_dashboard(
         ),
         payload=payload,
     )
-    await _safe_edit(ack, prose)
+    await _safe_edit(ack, tg_normalise(prose))
     await record("agent", "outbound", {"text": "dashboard"}, session_id=session_id)
 
 
@@ -127,7 +128,7 @@ async def cmd_budget(
         ),
         payload=payload,
     )
-    await _safe_edit(ack, prose)
+    await _safe_edit(ack, tg_normalise(prose))
     await record("agent", "outbound", {"text": "budget"}, session_id=session_id)
 
 
@@ -143,7 +144,8 @@ async def cmd_inbox(message: Message, bot: Bot, session_id: str) -> None:
     pending = await drafts.list_status("pending")
     if not pending:
         await message.answer(
-            "📭 *Inbox clear.* Nothing waiting on you.",
+            "📭 *Inbox clear.* No marketing posts waiting on you.\n\n"
+            "_Customer orders confirm automatically — they don't queue here._",
             parse_mode="Markdown",
         )
         await record(
@@ -278,19 +280,29 @@ async def _safe_callback_edit(callback: CallbackQuery, text: str) -> None:
     msg = callback.message
     if isinstance(msg, InaccessibleMessage) or msg is None:
         return
+    rendered = tg_normalise(text)
     try:
-        await msg.edit_text(text)
+        await msg.edit_text(rendered, parse_mode="Markdown")
     except Exception as exc:
         log.warning("callback.edit_failed", err=str(exc))
+        try:
+            await msg.edit_text(text)
+        except Exception as exc2:
+            log.warning("callback.edit_plain_failed", err=str(exc2))
 
 
 async def _safe_edit(message: Message, text: str) -> None:
     """Edit a regular message in place; tolerate Telegram quirks."""
+    rendered = tg_normalise(text)
     try:
-        await message.edit_text(text)
+        await message.edit_text(rendered, parse_mode="Markdown")
     except Exception as exc:
-        log.warning("message.edit_failed", err=str(exc))
-        await message.answer(text)
+        log.warning("message.edit_failed_md", err=str(exc))
+        try:
+            await message.edit_text(text)
+        except Exception as exc2:
+            log.warning("message.edit_failed_plain", err=str(exc2))
+            await message.answer(text)
 
 
 async def _safe_call(mcp: HappycakeMcpClient, tool: str) -> Any:

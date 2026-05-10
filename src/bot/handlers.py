@@ -8,6 +8,7 @@ system prompt — handlers don't see it.
 from __future__ import annotations
 
 import json as _json
+import re as _re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,11 +18,17 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
+from src.bot.markdown import tg_normalise
+from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.core.voice import LintRequest, lint
 from src.storage import drafts, sessions
 from src.storage.audit import record
 from src.storage.db import get_connection
+
+_SECS_PER_MIN = 60
+_SECS_PER_HOUR = 3600
+_SECS_PER_DAY = 86400
 
 router = Router(name="commands")
 log = get_logger(__name__)
@@ -106,6 +113,121 @@ async def cmd_logout(message: Message, session_id: str) -> None:
     )
 
 
+@router.message(Command("notify"))
+async def cmd_notify(message: Message, session_id: str) -> None:
+    """Configure the proactive-push cadence.
+
+    Usage:
+      ``/notify``                  → show current setting
+      ``/notify 1m | 30m | 2h``    → set interval (60s ≤ x ≤ 24h)
+      ``/notify off`` / ``on``     → silence / re-enable
+    """
+    text = (message.text or "").strip()
+    parts = text.split(None, 1)
+    arg = parts[1].strip().lower() if len(parts) > 1 else ""
+
+    current = await drafts.get_notifier_interval()
+    default = get_settings().notifier_interval_s
+
+    if not arg:
+        active = current if current is not None else default
+        if active == 0:
+            reply = (
+                "🔕 *Proactive pushes are off.*\n"
+                "Send `/notify 1m`, `/notify 30m`, `/notify 2h`, or "
+                "`/notify on` to re-enable. Default: "
+                f"{_format_interval(default)}."
+            )
+        else:
+            reply = (
+                f"🔔 *Pushing every {_format_interval(active)}.*\n"
+                "Change with `/notify 1m`, `/notify 30m`, `/notify 2h`, or "
+                "`/notify off`."
+            )
+        try:
+            await message.answer(tg_normalise(reply), parse_mode="Markdown")
+        except Exception as exc:
+            log.warning("notify.markdown_failed", err=str(exc))
+            await message.answer(reply)
+        return
+
+    seconds = _parse_notify_arg(arg, default=default)
+    if seconds is None:
+        await message.answer(
+            "I didn't catch that. Try `/notify 1m`, `/notify 30m`, "
+            "`/notify 2h`, or `/notify off`.",
+        )
+        return
+
+    await drafts.set_notifier_interval(seconds)
+    if seconds == 0:
+        reply = (
+            "🔕 Pushes silenced. Send `/notify on` (or any interval) "
+            "to re-enable."
+        )
+    else:
+        reply = (
+            f"🔔 OK. Pushing every *{_format_interval(seconds)}* from now on."
+        )
+    try:
+        await message.answer(tg_normalise(reply), parse_mode="Markdown")
+    except Exception as exc:
+        log.warning("notify.markdown_failed", err=str(exc))
+        await message.answer(reply)
+    await record(
+        "agent",
+        "outbound",
+        {"text": "notify", "interval_s": seconds},
+        session_id=session_id,
+    )
+
+
+_NOTIFY_MIN_SECONDS = 60
+_NOTIFY_MAX_SECONDS = 24 * 3600
+
+
+def _parse_notify_arg(arg: str, *, default: int) -> int | None:
+    """Parse `1m` / `30m` / `2h` / `off` / `on` / number-only into seconds."""
+    arg = arg.strip().lower()
+    if arg in {"off", "0"}:
+        return 0
+    if arg in {"on", "default"}:
+        return default
+    match = _re.fullmatch(r"(\d+)\s*([smhd]?)", arg)
+    if not match:
+        return None
+    value = int(match.group(1))
+    unit = match.group(2) or "s"
+    multiplier = {
+        "s": 1,
+        "m": _SECS_PER_MIN,
+        "h": _SECS_PER_HOUR,
+        "d": _SECS_PER_DAY,
+    }[unit]
+    seconds = value * multiplier
+    if seconds == 0:
+        return 0
+    return max(_NOTIFY_MIN_SECONDS, min(seconds, _NOTIFY_MAX_SECONDS))
+
+
+def _format_interval(seconds: int) -> str:
+    """Render seconds as 'N min' / 'N h' for human display."""
+    if seconds <= 0:
+        return "off"
+    if seconds < _SECS_PER_MIN:
+        return f"{seconds} s"
+    if seconds < _SECS_PER_HOUR:
+        return f"{seconds // _SECS_PER_MIN} min"
+    if seconds < _SECS_PER_DAY:
+        hours = seconds / _SECS_PER_HOUR
+        return (
+            f"{int(hours)} h"
+            if hours == int(hours)
+            else f"{round(hours, 1)} h"
+        )
+    return f"{seconds // _SECS_PER_DAY} d"
+
+
 @router.message()
 async def message_handler(
     message: Message,
@@ -179,11 +301,10 @@ async def message_handler(
 
     reply_text = reply_text or "(no response)"
     voice_warnings = lint(LintRequest(text=reply_text, channel="telegram"))
-    # Owner persona writes inline markdown (*bold*, _italic_, bullets, emojis).
-    # Telegram renders Markdown when parse_mode is set; fall back to plain
-    # text on render errors so a stray asterisk never blocks the reply.
+    # Persona may write CommonMark **bold**; Telegram classic wants *single*.
+    rendered = tg_normalise(reply_text)
     try:
-        await message.answer(reply_text, parse_mode="Markdown")
+        await message.answer(rendered, parse_mode="Markdown")
     except Exception as exc:
         log.warning("telegram.markdown_render_failed", err=str(exc))
         await message.answer(reply_text)
