@@ -109,17 +109,25 @@ class KitchenRunner:
         ``(accepted_count, rejected_count, marked_ready_count)``."""
         accepted = rejected = marked_ready = 0
 
-        # 1. Walk pending tickets. Capacity-aware: refuse new ones if
-        #    accepting would dip below the reject threshold.
-        try:
-            pending_resp = await call_with_retry(
-                self.mcp, "kitchen_list_tickets", {"status": "pending"}
-            )
-        except (McpTransportError, McpError) as exc:
-            log.warning("kitchen.runner.list_pending_failed", err=str(exc))
-            return accepted, rejected, marked_ready
-
-        pending = _coerce_tickets(pending_resp)
+        # 1. Walk queued tickets. Capacity-aware: refuse new ones if
+        #    accepting would dip below the reject threshold. The MCP
+        #    simulator labels new tickets "queued" (not "pending");
+        #    we also probe "pending" as a fallback so a future schema
+        #    rename doesn't silently break the loop.
+        pending: list[dict[str, Any]] = []
+        for status in ("queued", "pending"):
+            try:
+                resp = await call_with_retry(
+                    self.mcp, "kitchen_list_tickets", {"status": status}
+                )
+            except (McpTransportError, McpError) as exc:
+                log.warning(
+                    "kitchen.runner.list_pending_failed",
+                    status=status,
+                    err=str(exc),
+                )
+                continue
+            pending.extend(_coerce_tickets(resp))
         for ticket in pending:
             ticket_id = str(ticket.get("id") or ticket.get("ticketId") or "")
             if not ticket_id:
