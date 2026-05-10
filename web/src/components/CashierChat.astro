@@ -99,7 +99,17 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? "";
   </div>
 </section>
 
-<style>
+<style is:global>
+  /* is:global — the chat transcript rows are created at runtime by
+     /cashier-chat.js (an external script). Astro's default scoped
+     CSS adds a build-time [data-astro-cid-…] attribute to every
+     selector AND to every element it renders, but DOM nodes created
+     by external JS don't inherit that attribute, so the scoped rules
+     never match runtime-built bubbles. is:global drops the attribute
+     selector so the rules match runtime-created `.cashier-row--user`
+     and `.cashier-row--assistant` elements as expected. The class
+     names below are sufficiently namespaced (`cashier-*`) that
+     bleeding outside this component is not a concern. */
   .cashier-hero {
     position: relative;
     overflow: hidden;
