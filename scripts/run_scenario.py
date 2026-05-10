@@ -132,7 +132,11 @@ async def _amain(scenario_id: str, max_events: int, advance_each: int) -> int:
         / f"scorecard_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
     )
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(f"scorecard → {out_path.relative_to(REPO_ROOT)}")
+    try:
+        display_path: object = out_path.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        display_path = out_path
+    print(f"scorecard → {display_path}")
     print(json.dumps(_short(report), indent=2))
     return 0
 
