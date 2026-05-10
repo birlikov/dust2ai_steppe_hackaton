@@ -69,8 +69,37 @@
   const chips = document.getElementById("cashier-chips");
   const figure = document.getElementById("cashier-figure");
   const caption = document.getElementById("cashier-caption");
+  const clearBtn = document.getElementById("cashier-clear");
 
   if (!transcript || !form || !input || !send || !chips) return;
+
+  function syncClearVisibility() {
+    if (!clearBtn) return;
+    const hasMessages = transcript.classList.contains("has-messages");
+    if (hasMessages) {
+      clearBtn.removeAttribute("hidden");
+    } else {
+      clearBtn.setAttribute("hidden", "");
+    }
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function () {
+      // Wipe persisted history + the displayed transcript.
+      // Keep the session id so the backend treats this as a logical
+      // continuation (audit log + repeat-customer detection still work);
+      // the user just gets a clean visual surface.
+      try {
+        localStorage.removeItem(HISTORY_KEY);
+      } catch (e) {
+        // ignore — clearing is best-effort
+      }
+      transcript.innerHTML = "";
+      transcript.classList.remove("has-messages");
+      syncClearVisibility();
+      input.focus();
+    });
+  }
 
   const CAPTIONS = {
     idle: "listening",
@@ -195,6 +224,7 @@
     transcript.appendChild(row);
     transcript.classList.add("has-messages");
     transcript.scrollTop = transcript.scrollHeight;
+    syncClearVisibility();
     return row;
   }
 

@@ -95,6 +95,28 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? "";
         />
         <button type="submit" class="cashier-send" id="cashier-send">Ask</button>
       </form>
+
+      <!-- Manual-browse links + clear-conversation button. The clear
+           button only shows when the transcript has at least one row;
+           cashier-chat.js toggles its hidden attribute. -->
+      <div class="cashier-card__footer">
+        <div class="cashier-quicklinks">
+          <span class="cashier-quicklinks__label">Or browse:</span>
+          <a class="cashier-quicklink" href="/menu">Menu</a>
+          <a class="cashier-quicklink" href="/order">Order</a>
+          <a class="cashier-quicklink" href="/custom">Custom</a>
+          <a class="cashier-quicklink" href="/policies">Policies</a>
+        </div>
+        <button
+          type="button"
+          class="cashier-clear"
+          id="cashier-clear"
+          hidden
+          aria-label="Clear conversation"
+        >
+          Clear chat
+        </button>
+      </div>
     </div>
   </div>
 </section>
@@ -378,6 +400,66 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? "";
   .cashier-send:disabled {
     background: #3B7BA8;
     cursor: not-allowed;
+  }
+
+  /* Footer row — quick links left, clear-chat button right. */
+  .cashier-card__footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem 0.6rem;
+    margin-top: 0.4rem;
+    border-top: 0.5px solid rgba(14, 42, 60, 0.15);
+    font-family: Inter, system-ui, sans-serif;
+    font-size: 0.75rem;
+  }
+  .cashier-quicklinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.8rem;
+    align-items: baseline;
+    color: rgba(26, 24, 22, 0.7);
+  }
+  .cashier-quicklinks__label {
+    font-weight: 500;
+    color: rgba(26, 24, 22, 0.55);
+  }
+  .cashier-quicklink {
+    color: #1B4868;
+    text-decoration: none;
+    font-weight: 500;
+    border-bottom: 1px dotted rgba(27, 72, 104, 0.4);
+    padding-bottom: 1px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .cashier-quicklink:hover,
+  .cashier-quicklink:focus {
+    color: #0E2A3C;
+    border-bottom-color: #0E2A3C;
+    outline: none;
+  }
+  .cashier-clear {
+    background: transparent;
+    border: 1px solid rgba(14, 42, 60, 0.25);
+    color: rgba(26, 24, 22, 0.65);
+    font: inherit;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .cashier-clear:hover,
+  .cashier-clear:focus {
+    background: rgba(224, 128, 102, 0.08);
+    color: #0E2A3C;
+    border-color: rgba(14, 42, 60, 0.5);
+    outline: none;
+  }
+  .cashier-clear[hidden] {
+    display: none;
   }
 
   .sr-only {
