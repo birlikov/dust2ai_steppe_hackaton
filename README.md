@@ -121,6 +121,26 @@ To unpair, send `/logout`. Re-pair with the same passphrase any time.
 > script's final summary. The first browser hit shows ngrok's interstitial;
 > internal fetches send `ngrok-skip-browser-warning: true` to bypass it.
 
+### What it looks like
+
+**Storefront cashier chat** — talk to the HappyCake cashier directly
+on the homepage. Every reply grounded in a live MCP tool call.
+
+![Cashier chat on the storefront](assets/screenshots/cashier.png)
+
+**Owner Telegram cockpit — `/dashboard`** — five-bullet brief
+covering today's sales, kitchen tickets, live conversations, GB
+review pulse, and drafts pending. Composed by the owner-bridge from
+parallel `square_*` / `kitchen_*` / `gb_*` / `marketing_*` calls.
+
+![Owner /dashboard reply](assets/screenshots/owner-dashboard.png)
+
+**Owner Telegram cockpit — `/budget`** — marketing snapshot: $500
+envelope status, top-3 leads sorted by `priority_score` (margin ×
+source-weight × recency), recommended next move.
+
+![Owner /budget reply](assets/screenshots/owner-marketing.png)
+
 ## What's wired
 
 Six outcomes from brief §3, all served by the same MCP-grounded runtime
