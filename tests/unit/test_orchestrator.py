@@ -7,6 +7,7 @@ import pytest
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.core.config import get_settings
 from src.storage import db
+from src.storage import drafts as drafts_mod
 from src.workflows.orchestrator import (
     Orchestrator,
     OrchestratorError,
@@ -116,6 +117,58 @@ async def test_empty_reply_normalised_to_placeholder() -> None:
         )
     )
     assert out.reply == "(no response)"
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Let me check with the team and we'll get back to you within the hour.",
+        "I'll ask Saule and circle back shortly.",
+        "Let me check with Saule on the custom decoration.",
+        "We'll respond as soon as we hear back.",
+        "Getting back to you within 24 hours.",
+    ],
+)
+@pytest.mark.asyncio
+async def test_escalation_phrase_creates_inbox_draft(reply: str) -> None:
+    """A persona promise to follow up should park a draft in /inbox."""
+    bridge = _bridge_with(reply=reply)
+    orch = Orchestrator(bridge=bridge)
+    await orch.run(
+        TurnRequest(
+            channel="whatsapp",
+            external_id="+15555550199",
+            user_message="any chance of a peanut-free cake for tomorrow?",
+        )
+    )
+    pending = await drafts_mod.list_status("pending")
+    assert any(d.kind == "escalation_callback" for d in pending), (
+        "expected an escalation_callback draft after escalation reply"
+    )
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        'Yes — cake "Honey" is on the counter, 1.2 kg, $42.',
+        "We have honey-cake slices today at $8.50.",
+        "Pickup is available between 9 and 6 today.",
+    ],
+)
+@pytest.mark.asyncio
+async def test_normal_reply_does_not_create_escalation_draft(reply: str) -> None:
+    """Concrete answers shouldn't queue an escalation."""
+    bridge = _bridge_with(reply=reply)
+    orch = Orchestrator(bridge=bridge)
+    await orch.run(
+        TurnRequest(
+            channel="website",
+            external_id="visitor-no-escalation",
+            user_message="do you have honey cake?",
+        )
+    )
+    pending = await drafts_mod.list_status("pending")
+    assert not any(d.kind == "escalation_callback" for d in pending)
 
 
 def _runner_with_stdout(stdout: bytes):

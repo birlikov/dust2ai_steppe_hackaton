@@ -20,6 +20,31 @@ import type { CatalogResponse, Product } from "../lib/api";
 // Explicitly prerender (static output). Astro calls GET at build time.
 export const prerender = true;
 
+// Build-time API base for the prerender call only — see scripts/run.sh.
+// PUBLIC_API_BASE stays "" in production so browser fetches use relative
+// URLs (same origin as the page). HAPPYCAKE_BUILD_API_BASE is read here
+// to point the *server-side* prerender at the local backend so this
+// endpoint reflects live MCP data instead of the static_fallback shape.
+const BUILD_API_BASE = (
+  (typeof process !== "undefined" && process.env?.HAPPYCAKE_BUILD_API_BASE) ||
+  ""
+).replace(/\/$/, "");
+
+async function fetchLiveCatalog(): Promise<CatalogResponse | null> {
+  if (!BUILD_API_BASE) {
+    return fetchCatalog();
+  }
+  try {
+    const r = await fetch(`${BUILD_API_BASE}/api/catalog`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    return (await r.json()) as CatalogResponse;
+  } catch {
+    return null;
+  }
+}
+
 const FALLBACK_PRODUCTS: Product[] = [
   {
     id: "sq_item_honey_cake_slice",
@@ -106,7 +131,7 @@ const STATIC_FALLBACK: CatalogResponse = {
 };
 
 export const GET: APIRoute = async () => {
-  const catalog = (await fetchCatalog()) ?? STATIC_FALLBACK;
+  const catalog = (await fetchLiveCatalog()) ?? STATIC_FALLBACK;
 
   return new Response(JSON.stringify(catalog, null, 2), {
     status: 200,

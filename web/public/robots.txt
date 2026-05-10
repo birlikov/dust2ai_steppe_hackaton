@@ -1,5 +1,13 @@
 User-agent: *
 Allow: /
+# /api/* is documented in /agent.txt — these are the contracted entry
+# points for autonomous AI customers (catalog, policies, ordering, chat).
+# More-specific Allow rules sit above the blanket Disallow so robots
+# parsers honour them per RFC 9309 §2.2.2 (longest match wins).
+Allow: /api/catalog
+Allow: /api/policies
+Allow: /api/order
+Allow: /api/chat
 Disallow: /api/
 
 Sitemap: https://happycake.us/sitemap.xml

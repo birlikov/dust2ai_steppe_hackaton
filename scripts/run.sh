@@ -172,20 +172,11 @@ echo "▶ installing web deps (npm install)…"
 echo "  ✓ web deps ready"
 
 # ---------------------------------------------------------------------------
-# 5. Build web/ with relative API URLs
-# ---------------------------------------------------------------------------
-echo "▶ building web/ (PUBLIC_API_BASE='' for relative URLs)…"
-(
-    cd web
-    PUBLIC_API_BASE= npm run build > "$REPO_ROOT/data/web-build.log" 2>&1 || {
-        echo "  ✗ web build failed — see data/web-build.log" >&2
-        exit 1
-    }
-)
-echo "  ✓ web/dist/ ready"
-
-# ---------------------------------------------------------------------------
-# 6. Start uvicorn (FastAPI backend + storefront mount)
+# 5. Start uvicorn (FastAPI backend + storefront mount)
+#
+# Booted BEFORE the web build so Astro's prerender of /catalog.json
+# can fetch live MCP data via PUBLIC_API_BASE — otherwise it falls back
+# to the static_fallback shape with stale kitchen capacity numbers.
 # ---------------------------------------------------------------------------
 echo "▶ stopping any prior uvicorn / ngrok / bot processes…"
 pkill -f "uvicorn src.webhooks.app" 2>/dev/null || true
@@ -221,6 +212,25 @@ if ! curl -fsS http://127.0.0.1:8000/health > /dev/null 2>&1; then
     echo "  uvicorn failed to start — see data/uvicorn.log" >&2
     exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# 6. Build web/ — server-side prerender hits the local backend at build
+#    time so dist/catalog.json carries live data, not the static fallback.
+#    PUBLIC_API_BASE stays "" so client-side fetches use relative URLs
+#    (otherwise we'd bake "http://127.0.0.1:8000" into browser JS and the
+#    storefront would fail for any visitor at the public ngrok URL).
+#    HAPPYCAKE_BUILD_API_BASE is read only by /catalog.json's prerender.
+# ---------------------------------------------------------------------------
+echo "▶ building web/ (prerender hits live backend on :8000, client uses relative URLs)…"
+(
+    cd web
+    PUBLIC_API_BASE= HAPPYCAKE_BUILD_API_BASE=http://127.0.0.1:8000 \
+        npm run build > "$REPO_ROOT/data/web-build.log" 2>&1 || {
+        echo "  ✗ web build failed — see data/web-build.log" >&2
+        exit 1
+    }
+)
+echo "  ✓ web/dist/ ready"
 
 # ---------------------------------------------------------------------------
 # 7. Start the Telegram bot (optional)

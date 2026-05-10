@@ -18,19 +18,47 @@ identical for all of them.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
 from src.core.logging import get_logger
 from src.core.voice import LintRequest, Violation, lint
-from src.storage import sessions
+from src.storage import drafts, sessions
 from src.storage.audit import record
 
 log = get_logger(__name__)
 
 HISTORY_TURN_CAP = 12  # bridge will further cap; this caps what we persist too
 HISTORY_PERSIST_CAP = 24  # keep more in storage than we feed to the bridge
+
+# Phrases the persona uses to defer to the human owner. When any of these
+# show up in an outbound reply we drop a pending draft into the owner's
+# /inbox so the promise is traceable (otherwise the customer hears
+# "we'll get back to you" and nothing actually queues).
+_ESCALATION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:we'?ll|we will|i'?ll|i will|let me)\s+(?:get|come|circle)\s+back\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\blet me check with (?:the team|saule|the owner)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:i'?ll|i will) (?:ask|check with)\s+(?:the team|saule|the owner)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:we'?ll|i'?ll) (?:reply|respond|follow up)\b", re.IGNORECASE),
+    re.compile(r"\bwithin (?:the hour|an hour|24 hours|a day)\b", re.IGNORECASE),
+    re.compile(r"\bgetting back to you\b", re.IGNORECASE),
+)
+
+
+def _is_escalation_promise(text: str) -> bool:
+    """Return True if the persona's reply commits to a human follow-up."""
+    return any(p.search(text) for p in _ESCALATION_PATTERNS)
 
 
 @dataclass(slots=True)
@@ -111,6 +139,37 @@ class Orchestrator:
             },
             session_id=session.id,
         )
+
+        # When the persona promises a human follow-up ("we'll be back",
+        # "let me check with the team"), park a draft in the owner's
+        # /inbox so the commitment is traceable. Otherwise the customer
+        # hears a promise and nothing queues anywhere.
+        if _is_escalation_promise(reply):
+            try:
+                draft = await drafts.create(
+                    channel=request.channel,
+                    kind="escalation_callback",
+                    payload={
+                        "session_id": session.id,
+                        "external_id": request.external_id,
+                        "user_message": request.user_message,
+                        "agent_reply": reply,
+                    },
+                    idempotency_key=f"escalation:{session.id}",
+                )
+                log.info(
+                    "orchestrator.escalation_drafted",
+                    channel=request.channel,
+                    session_id=session.id,
+                    draft_id=draft.id,
+                )
+            except Exception as exc:
+                # Never let a draft failure block the customer reply.
+                log.warning(
+                    "orchestrator.escalation_draft_failed",
+                    channel=request.channel,
+                    err=str(exc),
+                )
 
         return TurnReply(
             session_id=session.id,
