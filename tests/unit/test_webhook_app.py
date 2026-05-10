@@ -8,7 +8,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 from src.core.config import get_settings
-from src.webhooks.app import build_app
+from src.webhooks.app import _extract_meta_messages, build_app
 from src.webhooks.security import compute_signature
 
 
@@ -68,3 +68,44 @@ def test_inbound_accepts_valid_signature(client: TestClient) -> None:
     )
     assert r.status_code == 200
     assert r.json()["status"] == "received"
+
+
+def test_extract_meta_messages_whatsapp() -> None:
+    """WhatsApp Cloud API envelope → (sender, text) tuples."""
+    body = (
+        b'{"object":"whatsapp_business_account","entry":[{"changes":[{"value":'
+        b'{"messages":[{"from":"+12815550100","type":"text",'
+        b'"text":{"body":"Hi! Honey cake please."}}]}}]}]}'
+    )
+    msgs = _extract_meta_messages(body, "whatsapp")
+    assert msgs == [("+12815550100", "Hi! Honey cake please.")]
+
+
+def test_extract_meta_messages_instagram() -> None:
+    """Instagram Messenger envelope → (sender, text) tuples."""
+    body = (
+        b'{"object":"instagram","entry":[{"messaging":[{'
+        b'"sender":{"id":"ig_user_42"},'
+        b'"recipient":{"id":"page_1"},'
+        b'"message":{"mid":"m_1","text":"saw your napoleon"}}]}]}'
+    )
+    msgs = _extract_meta_messages(body, "instagram")
+    assert msgs == [("ig_user_42", "saw your napoleon")]
+
+
+def test_extract_meta_messages_skips_receipts_and_garbage() -> None:
+    """Non-message envelopes (receipts, garbage, wrong shapes) yield []."""
+    # WhatsApp delivery receipt — has statuses, no messages.
+    receipt = (
+        b'{"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid","status":"sent"}]}}]}]}'
+    )
+    assert _extract_meta_messages(receipt, "whatsapp") == []
+    # Instagram read receipt.
+    ig_read = b'{"entry":[{"messaging":[{"sender":{"id":"u"},"read":{"watermark":1}}]}]}'
+    assert _extract_meta_messages(ig_read, "instagram") == []
+    # Junk JSON.
+    assert _extract_meta_messages(b"not json", "whatsapp") == []
+    # Top-level array.
+    assert _extract_meta_messages(b"[]", "whatsapp") == []
+    # Unknown channel.
+    assert _extract_meta_messages(b'{"entry":[]}', "telegram") == []

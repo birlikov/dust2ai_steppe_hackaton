@@ -22,6 +22,7 @@ client at boot and closes them on shutdown.
 from __future__ import annotations
 
 import hashlib
+import json as _json
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -29,7 +30,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -546,6 +547,7 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
     async def inbound(
         channel: str,
         request: Request,
+        background_tasks: BackgroundTasks,
         x_hub_signature_256: str | None = Header(default=None),
     ) -> dict[str, Any]:
         if channel not in CHANNELS:
@@ -558,6 +560,34 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
         await record(
             "system", "inbound", {"channel": channel, "size": len(body)}
         )
+
+        # Parse the Meta envelope and dispatch each customer message
+        # through the runtime persona. We schedule this as a background
+        # task so we ack the webhook in <1s (Meta requires <20s or it
+        # retries). Empty/non-message envelopes (delivery receipts,
+        # account updates) parse to zero messages and the background
+        # task is a no-op.
+        messages = _extract_meta_messages(body, channel)
+        if messages:
+            orch = getattr(app.state, "orchestrator", None)
+            mcp = getattr(app.state, "mcp_client", None)
+            if orch is not None and mcp is not None:
+                for sender, text in messages:
+                    background_tasks.add_task(
+                        _dispatch_inbound_message,
+                        channel=channel,
+                        sender=sender,
+                        text=text,
+                        orchestrator=orch,
+                        mcp=mcp,
+                    )
+            else:
+                log.warning(
+                    "webhook.dispatch_skipped",
+                    reason="orchestrator_or_mcp_missing",
+                    channel=channel,
+                    message_count=len(messages),
+                )
         return {"status": "received"}
 
     # Mount the Astro static build last so /api/* and /webhook/* match first.
@@ -579,6 +609,143 @@ def build_app(deps: AppDeps | None = None) -> FastAPI:  # noqa: PLR0915
 
 def _new_external_id() -> str:
     return str(uuid.uuid4())
+
+
+# ---------------------------------------------------------------------------
+# Meta-shaped webhook envelope parsing + dispatch
+# ---------------------------------------------------------------------------
+
+
+def _extract_meta_messages(body: bytes, channel: str) -> list[tuple[str, str]]:
+    """Return a list of ``(sender_id, text)`` from a Meta webhook payload.
+
+    WhatsApp Cloud API uses ``entry[].changes[].value.messages[]`` with
+    ``from`` (E.164) + ``text.body``. Instagram Messenger uses
+    ``entry[].messaging[]`` with ``sender.id`` + ``message.text``. Both
+    shapes are tolerated and silently skipped on shape mismatch — Meta
+    also delivers status receipts, account updates, etc., which carry no
+    customer message and should not trigger the persona.
+    """
+    try:
+        envelope = _json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, _json.JSONDecodeError):
+        return []
+    if not isinstance(envelope, dict):
+        return []
+    entries = envelope.get("entry") or []
+    if not isinstance(entries, list):
+        return []
+
+    extractor = _META_EXTRACTORS.get(channel)
+    if extractor is None:
+        return []
+    out: list[tuple[str, str]] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            out.extend(extractor(entry))
+    return out
+
+
+def _wa_messages_from_entry(entry: dict[str, Any]) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for change in entry.get("changes") or []:
+        if not isinstance(change, dict):
+            continue
+        value = change.get("value") or {}
+        for msg in value.get("messages") or []:
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("type") not in (None, "text"):
+                continue
+            sender = str(msg.get("from") or "").strip()
+            body_block = msg.get("text")
+            text = ""
+            if isinstance(body_block, dict):
+                text = str(body_block.get("body") or "").strip()
+            if sender and text:
+                out.append((sender, text))
+    return out
+
+
+def _ig_messages_from_entry(entry: dict[str, Any]) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for event in entry.get("messaging") or []:
+        if not isinstance(event, dict):
+            continue
+        sender_obj = event.get("sender") or {}
+        sender = str(sender_obj.get("id") or "").strip()
+        msg = event.get("message") or {}
+        text = (
+            str(msg.get("text") or "").strip() if isinstance(msg, dict) else ""
+        )
+        # Skip read receipts / echoes — they have ``read``/``delivery``
+        # but no ``message.text``.
+        if sender and text:
+            out.append((sender, text))
+    return out
+
+
+_META_EXTRACTORS = {
+    "whatsapp": _wa_messages_from_entry,
+    "instagram": _ig_messages_from_entry,
+}
+
+
+_OUTBOUND_TOOL: dict[str, str] = {
+    "whatsapp": "whatsapp_send",
+    "instagram": "instagram_send_dm",
+}
+
+
+async def _dispatch_inbound_message(
+    *,
+    channel: str,
+    sender: str,
+    text: str,
+    orchestrator: Orchestrator,
+    mcp: HappycakeMcpClient,
+) -> None:
+    """Run the persona on a parsed Meta inbound and post the reply.
+
+    Best-effort: orchestrator failures or MCP failures log a warning and
+    drop the message rather than blowing up the webhook task. The audit
+    log inside the orchestrator already records the inbound + reply.
+    """
+    try:
+        external_id = sender if channel == "whatsapp" else f"dm:{sender}"
+        turn = await orchestrator.run(
+            TurnRequest(
+                channel=channel,
+                external_id=external_id,
+                user_message=text,
+            )
+        )
+    except OrchestratorError as exc:
+        log.warning(
+            "webhook.dispatch_persona_failed",
+            channel=channel,
+            sender=sender,
+            err=str(exc),
+        )
+        return
+
+    tool = _OUTBOUND_TOOL.get(channel)
+    if tool is None:
+        return
+    try:
+        if channel == "whatsapp":
+            args = {"to": sender, "message": turn.reply}
+        else:
+            args = {"threadId": sender, "message": turn.reply}
+        await call_with_retry(mcp, tool, args)
+    except (McpTransportError, McpError) as exc:
+        log.warning(
+            "webhook.dispatch_outbound_failed",
+            channel=channel,
+            tool=tool,
+            sender=sender,
+            err=str(exc),
+        )
 
 
 def _format_cart_context(cart: Any) -> str:

@@ -15,9 +15,14 @@ from typing import Any
 from aiogram import Bot, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from src.agents.claude_bridge import ClaudeBridge, ClaudeBridgeError
+from src.bot.keyboards import (
+    CB_NOTIFY_PREFIX,
+    notify_keyboard,
+    parse_notify_callback,
+)
 from src.bot.markdown import tg_normalise
 from src.core.config import get_settings
 from src.core.logging import get_logger
@@ -118,8 +123,8 @@ async def cmd_notify(message: Message, session_id: str) -> None:
     """Configure the proactive-push cadence.
 
     Usage:
-      ``/notify``                  → show current setting
-      ``/notify 1m | 30m | 2h``    → set interval (60s ≤ x ≤ 24h)
+      ``/notify``                  → show current setting + tap-to-pick keyboard
+      ``/notify 1m | 30m | 2h``    → set interval directly (60s ≤ x ≤ 24h)
       ``/notify off`` / ``on``     → silence / re-enable
     """
     text = (message.text or "").strip()
@@ -130,25 +135,31 @@ async def cmd_notify(message: Message, session_id: str) -> None:
     default = get_settings().notifier_interval_s
 
     if not arg:
+        # No argument → tap-to-pick. The keyboard ✓-marks the current
+        # setting; "Default" clears the per-owner override.
         active = current if current is not None else default
-        if active == 0:
-            reply = (
-                "🔕 *Proactive pushes are off.*\n"
-                "Send `/notify 1m`, `/notify 30m`, `/notify 2h`, or "
-                "`/notify on` to re-enable. Default: "
-                f"{_format_interval(default)}."
+        header = (
+            "🔕 *Proactive pushes are currently off.*"
+            if active == 0
+            else f"🔔 *Pushing every {_format_interval(active)}.*"
+        )
+        if current is None:
+            footer = (
+                f"_Using the env default ({_format_interval(default)})._\n"
+                "Tap a preset below to override:"
             )
         else:
-            reply = (
-                f"🔔 *Pushing every {_format_interval(active)}.*\n"
-                "Change with `/notify 1m`, `/notify 30m`, `/notify 2h`, or "
-                "`/notify off`."
-            )
+            footer = "Tap a preset below to change:"
+        reply = f"{header}\n{footer}"
         try:
-            await message.answer(tg_normalise(reply), parse_mode="Markdown")
+            await message.answer(
+                tg_normalise(reply),
+                parse_mode="Markdown",
+                reply_markup=notify_keyboard(current),
+            )
         except Exception as exc:
             log.warning("notify.markdown_failed", err=str(exc))
-            await message.answer(reply)
+            await message.answer(reply, reply_markup=notify_keyboard(current))
         return
 
     seconds = _parse_notify_arg(arg, default=default)
@@ -178,6 +189,65 @@ async def cmd_notify(message: Message, session_id: str) -> None:
         "agent",
         "outbound",
         {"text": "notify", "interval_s": seconds},
+        session_id=session_id,
+    )
+
+
+@router.callback_query(lambda c: (c.data or "").startswith(CB_NOTIFY_PREFIX))
+async def cb_notify(callback: CallbackQuery, session_id: str) -> None:
+    """Handle taps on the /notify inline keyboard.
+
+    The callback payload is ``notify:<seconds>`` or ``notify:default``.
+    On success we update the persisted override, edit the message in
+    place to reflect the new state, and re-render the keyboard so the
+    ✓ marker moves to the chosen option.
+    """
+    data = callback.data or ""
+    try:
+        chosen = parse_notify_callback(data)
+    except ValueError:
+        await callback.answer("Stale button — send /notify again.", show_alert=False)
+        return
+
+    await drafts.set_notifier_interval(chosen)
+    default = get_settings().notifier_interval_s
+    active = chosen if chosen is not None else default
+
+    if active == 0:
+        ack = "🔕 Silenced."
+        body_header = "🔕 *Proactive pushes are off.*"
+    else:
+        ack = f"🔔 Every {_format_interval(active)}."
+        body_header = f"🔔 *Pushing every {_format_interval(active)}.*"
+    if chosen is None:
+        footer = (
+            f"_Using the env default ({_format_interval(default)})._\n"
+            "Tap a preset below to override:"
+        )
+    else:
+        footer = "Tap a preset below to change:"
+    body = f"{body_header}\n{footer}"
+
+    await callback.answer(ack, show_alert=False)
+    # `callback.message` may be a stale ``InaccessibleMessage`` (the
+    # original was deleted) — only edit if we have a live ``Message``.
+    msg = callback.message
+    if not isinstance(msg, Message):
+        return
+    try:
+        await msg.edit_text(
+            tg_normalise(body),
+            parse_mode="Markdown",
+            reply_markup=notify_keyboard(chosen),
+        )
+    except Exception as exc:
+        # Telegram raises if the new content is byte-identical to the
+        # current content; we log and move on.
+        log.warning("notify.callback_edit_failed", err=str(exc))
+    await record(
+        "agent",
+        "outbound",
+        {"text": "notify_via_keyboard", "interval_s": chosen},
         session_id=session_id,
     )
 
